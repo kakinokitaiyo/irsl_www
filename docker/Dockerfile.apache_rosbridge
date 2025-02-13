@@ -1,0 +1,28 @@
+##
+## docker build . -f Dockerfile.apache_rosbridge apache_rosbridge:noetic
+##
+ARG BASE_IMAGE=ros:noetic-ros-base
+FROM ${BASE_IMAGE}
+
+LABEL maintainer="IRSL-tut (https://github.com/IRSL-tut) <faculty@irsl.eiiris.tut.ac.jp>"
+
+SHELL ["/bin/bash", "-c"]
+
+# https://qiita.com/haessal/items/0a83fe9fa1ac00ed5ee9
+ENV DEBCONF_NOWARNINGS=yes
+# https://qiita.com/yagince/items/deba267f789604643bab
+ENV DEBIAN_FRONTEND=noninteractive
+# https://qiita.com/jacob_327/items/e99ca1cf8167d4c1486d
+ENV APT_KEY_DONT_WARN_ON_DANGEROUS_USAGE=1
+
+RUN apt update -q -qq && \
+    apt install -q -qq -y curl wget git bc \
+                          vim-tiny net-tools iproute2 traceroute \
+                          apache2 ros-${ROS_DISTRO}-rosbridge-suite ros-${ROS_DISTRO}-web-video-server && \
+    apt clean && \
+    rm -rf /var/lib/apt/lists/
+
+## ENTRYPOINT
+## ENV
+## EXPOSE
+## CMD

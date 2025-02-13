@@ -1,0 +1,76 @@
+<!doctype html>
+<html>
+<head>
+  <title>device test</title>
+  <meta charset='utf-8'>
+  <link rel="stylesheet" href="touch.css" type="text/css" media="all">
+  <!-- ROS -->
+  <script src="https://cdn.jsdelivr.net/npm/roslib@1/build/roslib.min.js"></script>
+  <script src='../ros/rosmain.js'> </script>
+  <!-- -->
+  <script src="touch.js?version=0001"></script>
+</head>
+<!-- https://developer.mozilla.org/ja/docs/Web/API/Touch_events -->
+<body>
+  <canvas id="canvas" width="600" height="600" style="border:solid black 1px;">
+    このブラウザーは canvas 要素に対応していません。
+  </canvas>
+  <br />
+  <div id="header-contents"> </div>
+  <br />
+  <div>
+    <button type="button" id="buttonSend">Send</button>
+  </div>
+  <div>
+    <button type="button" id="buttonClear">Clear</button>
+  </div>
+  <br />
+  <!-- No Log
+  Log:
+  <pre id="log" style="border: 1px solid #ccc;"></pre>
+  -->
+  <script>
+      const ros = ros_start();
+      if (ros) {
+          var rostopic = new ROSLIB.Topic({
+              ros : ros,
+              name : '/writing',
+              messageType : 'std_msgs/String'
+          });
+      }
+      function callbackAudioBlob(blob) {
+          //console.log('callback');
+          //console.log(blob);
+          convertBlobToDataURL(blob).then( v => {
+              console.log('dataurl');
+              console.log(v);
+              if (ros) {
+                  var msg = new ROSLIB.Message({ data: v });
+                  rostopic.publish(msg);
+              }
+          }).catch( er => {
+              console.log(er);
+          });
+      }
+    const buttonSend  = document.querySelector('#buttonSend');
+    const canvas = document.getElementById('canvas');
+    buttonSend.addEventListener('click', event => {
+        log('clicked');
+        //
+        var data = canvas.toDataURL('image/png');
+        //console.log(data);
+        if (ros) {
+            var msg = new ROSLIB.Message({ data: data });
+            rostopic.publish(msg);
+        }
+        // clear drawings
+        var context = canvas.getContext('2d');
+        //// background style
+        //context.fillStyle = "#FFFFFFFF";
+        //context.fillRect(0, 0, canvas.width, canvas.height);
+        //// background is transparent
+        context.clearRect(0, 0, canvas.width, canvas.height);
+    });
+  </script>
+</body>
+</html>

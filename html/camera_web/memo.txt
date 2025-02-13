@@ -1,0 +1,88 @@
+https://developer.mozilla.org/ja/docs/Web/API/Media_Capture_and_Streams_API/Taking_still_photos
+
+<div class="camera">
+  <video id="video">Video stream not available.</video>
+  <button id="startbutton">Take photo</button>
+</div>
+
+<canvas id="canvas"> </canvas>
+<div class="output">
+  <img id="photo" alt="The screen capture will appear in this box." />
+</div>
+
+
+HTML
+<div class="contentarea">
+  <h1>MDN - navigator.mediaDevices.getUserMedia(): Still photo capture demo</h1>
+  <p>
+    This example demonstrates how to set up a media stream using your built-in
+    webcam, fetch an image from that stream, and create a PNG using that image.
+  </p>
+  <div class="camera">
+    <video id="video">Video stream not available.</video>
+    <button id="startbutton">Take photo</button>
+  </div>
+  <canvas id="canvas"> </canvas>
+  <div class="output">
+    <img id="photo" alt="The screen capture will appear in this box." />
+  </div>
+  <p>
+    Visit our article
+    <a
+      href="https://developer.mozilla.org/ja/docs/Web/API/WebRTC_API/Taking_still_photos">
+      Taking still photos with WebRTC</a
+    >
+    to learn more about the technologies used here.
+  </p>
+</div>
+
+
+if (!navigator.mediaDevices?.enumerateDevices) {
+  console.log("enumerateDevices() not supported.");
+} else {
+  // カメラとマイクを列挙
+  navigator.mediaDevices
+    .enumerateDevices()
+    .then((devices) => {
+      devices.forEach((device) => {
+        console.log(`${device.kind}: ${device.label} id = ${device.deviceId}`);
+      });
+    })
+    .catch((err) => {
+      console.error(`${err.name}: ${err.message}`);
+    });
+}
+
+# -*- coding: utf-8 -*-
+import os
+import cv2
+import sys
+import numpy as np
+from PIL import Image
+
+path_png = "0002.png"
+path_jpg = "0002.jpg"
+
+image = Image.open(path_png).convert('P')
+image.save(path_png)
+rgb_im = Image.open(path_png).convert('RGB')
+rgb_im.save(path_jpg)
+
+print(image)
+print(rgb_im)
+print(np.asarray(image).shape)
+print(np.asarray(rgb_im).shape)
+
+
+from PIL import Image
+import io
+Image.open(io.BytesIO(image))
+
+base64.b64decode('44GT44KT44Gr44Gh44Gv')
+
+instr = 'data:image/png;base64,hogemoge'
+
+
+https://developer.mozilla.org/ja/docs/Web/API/MediaStreamTrack
+https://googlechrome.github.io/samples/image-capture/photo-resolution.html
+https://developer.mozilla.org/ja/docs/Web/API/ImageCapture/ImageCapture

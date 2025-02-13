@@ -1,0 +1,32 @@
+<!doctype html>
+<html>
+<head>
+  <title>device test</title>
+  <meta charset='utf-8'>
+</head>
+<body>
+  <div id="mytext">
+  </div>
+  <script>
+    var mytext = document.getElementById('mytext');
+
+    if (!navigator.mediaDevices?.enumerateDevices) {
+        console.log("enumerateDevices() not supported.");
+    } else {
+        // カメラとマイクを列挙
+        mytext.innerHTML = '';
+        navigator.mediaDevices.enumerateDevices()
+        .then((devices) => {
+            devices.forEach((device) => {
+                //console.log(device)
+                console.log(`${device.kind}: ${device.label} / id = ${device.deviceId}`);
+                mytext.innerHTML += `${device.kind}: ${device.label} / id = ${device.deviceId}<br>`;
+            });
+        })
+       .catch((err) => {
+           console.error(`${err.name}: ${err.message}`);
+       });
+    }
+  </script>
+</body>
+</html>
