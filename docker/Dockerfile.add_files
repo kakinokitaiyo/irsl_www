@@ -1,0 +1,19 @@
+ARG BASE_IMAGE=ros:noetic-ros-base
+FROM ${BASE_IMAGE}
+
+ARG COMMON_NAME="eiiris.tut.ac.jp"
+
+WORKDIR /irsl_security
+
+RUN openssl genrsa -out server.key 2048
+RUN openssl req -out server.csr -key server.key -new -subj "/C=JP/ST=Aichi/O=IRSL/CN=${COMMON_NAME}"
+RUN openssl x509 -req -days 3650 -signkey server.key -in server.csr -out server.crt
+
+COPY docker/userdir /runshell
+
+COPY script /userdir
+
+RUN rm -rf /var/www/html/*
+COPY html /var/www/html
+
+COPY docker/sites-available /etc/apache2/sites-available
