@@ -12,3 +12,4 @@ if [ ! -e userdir/server.crt ]; then
 fi
 
 docker build . --pull -f Dockerfile.apache_rosbridge --build-arg BASE_IMAGE=ros:noetic-ros-base -t apache_rosbridge:noetic
+#docker build . --pull -f Dockerfile.apache_rosbridge --build-arg BASE_IMAGE=repo.irsl.eiiris.tut.ac.jp/irsl_base:one_opengl -t apache_rosbridge:one

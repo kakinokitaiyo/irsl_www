@@ -17,8 +17,11 @@ ENV APT_KEY_DONT_WARN_ON_DANGEROUS_USAGE=1
 
 RUN apt update -q -qq && \
     apt install -q -qq -y curl wget git bc \
-                          vim-tiny net-tools iproute2 traceroute \
-                          apache2 ros-${ROS_DISTRO}-rosbridge-suite ros-${ROS_DISTRO}-web-video-server && \
+                          vim-tiny net-tools iproute2 traceroute openssl \
+                          apache2 ros-${ROS_DISTRO}-rosbridge-suite && \
+    if [ "${ROS_DISTRO}" != "one" ]; then \
+        apt install -q -qq -y ros-${ROS_DISTRO}-web-video-server; \
+    fi && \
     apt clean && \
     rm -rf /var/lib/apt/lists/
 

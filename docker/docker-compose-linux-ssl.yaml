@@ -2,12 +2,12 @@
 # WEB_HOSTNAME (default: 0.0.0.0)
 # BRIDGE_MASTER (default: http://localhost:11311)
 # BRIDGE_HOSTNAME (default: 0.0.0.0)
-# BRIDGE_PORT (default: 9990)
+# BRIDGE_PORT (default: 9909)
 # NETWORK_MODE (default: host)
 version: "3.0"
 services:
   web:
-    image: apache_rosbridge:noetic
+    image: apache_rosbridge:one
     # ipc: host
     security_opt:
       - seccomp:unconfined
@@ -22,7 +22,7 @@ services:
       - "${PWD}/sites-available:/etc/apache2/sites-available"
       - "${PWD}/../html:/var/www/html"
   bridge:
-    image: apache_rosbridge:noetic
+    image: apache_rosbridge:one
     security_opt:
       - seccomp:unconfined
     ports:
