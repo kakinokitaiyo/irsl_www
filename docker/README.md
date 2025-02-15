@@ -30,12 +30,12 @@ docker compose -f docker-compose-linux.yaml up
 
 通常の場合
 ```
-http://$$HOSTNAME$$/rostest/rostest.html??wsport=9909&wsaddr=$$HOSTNAME$$
+http://$$HOSTNAME$$/rostest/rostest.html?wsport=9909&wsaddr=$$HOSTNAME$$
 ```
 
 SSL の場合
 ```
-http://$$HOSTNAME$$/rostest/rostest.html??wsport=9990&wsaddr=$$HOSTNAME$$&ssl=1
+https://$$HOSTNAME$$/rostest/rostest.html?wsport=9990&wsaddr=$$HOSTNAME$$&ssl=1
 ```
 
 ```/webtest``` がsubscribeされる
@@ -44,7 +44,7 @@ http://$$HOSTNAME$$/rostest/rostest.html??wsport=9990&wsaddr=$$HOSTNAME$$&ssl=1
 
 SSL の場合
 ```
-http://$$HOSTNAME$$/audio/audio_wav.html??wsport=9990&wsaddr=$$HOSTNAME$$&ssl=1
+https://$$HOSTNAME$$/audio/audio_wav.html?wsport=9990&wsaddr=$$HOSTNAME$$&ssl=1
 ```
 
 ```/audio``` がpublishされる
@@ -55,12 +55,12 @@ http://$$HOSTNAME$$/audio/audio_wav.html??wsport=9990&wsaddr=$$HOSTNAME$$&ssl=1
 
 通常の場合
 ```
-http://$$HOSTNAME$$/touch/touch.html??wsport=9909&wsaddr=$$HOSTNAME$$
+http://$$HOSTNAME$$/touch/touch.html?wsport=9909&wsaddr=$$HOSTNAME$$
 ```
 
 SSL の場合
 ```
-http://$$HOSTNAME$$/touch/touch.html??wsport=9990&wsaddr=$$HOSTNAME$$&ssl=1
+https://$$HOSTNAME$$/touch/touch.html?wsport=9990&wsaddr=$$HOSTNAME$$&ssl=1
 ```
 
 ```/writing``` がpublishされる
