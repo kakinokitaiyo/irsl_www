@@ -2,7 +2,7 @@
 # WEB_HOSTNAME (default: 0.0.0.0)
 # BRIDGE_MASTER (default: http://localhost:11311)
 # BRIDGE_HOSTNAME (default: 0.0.0.0)
-# BRIDGE_PORT (default: 9909)
+# BRIDGE_PORT (default: 9990)
 # NETWORK_MODE (default: host)
 version: "3.0"
 services:
@@ -26,10 +26,10 @@ services:
     security_opt:
       - seccomp:unconfined
     ports:
-      - "9990:9990"
+      - "9909:9909"
     depends_on:
       - web
-    command: [ "/runshell/run_rosbridge_ssl.sh", "${BRIDGE_MASTER:-http://localhost:11311}", "${BRIDGE_HOSTNAME:-0.0.0.0}", "${BRIDGE_PORT:-9909}" ]
+    command: [ "/runshell/run_rosbridge_ssl.sh", "${BRIDGE_MASTER:-http://localhost:11311}", "${BRIDGE_HOSTNAME:-0.0.0.0}", "${BRIDGE_PORT:-9990}" ]
     volumes:
       - "${PWD}/userdir/server.key:/irsl_security/server.key"
       - "${PWD}/userdir/server.crt:/irsl_security/server.crt"
