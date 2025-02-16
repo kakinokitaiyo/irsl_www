@@ -6,7 +6,7 @@
 # NETWORK_MODE (default: host)
 version: "3.0"
 services:
-  web:
+  webserver:
     image: apache_rosbridge_win:noetic
     # ipc: host
     security_opt:
@@ -15,13 +15,13 @@ services:
       - "80:80"
       - "443:443"
     command: [ "/runshell/run_apache.sh", "${WEB_HOSTNAME:-0.0.0.0}" ]
-  bridge:
+  rosbridge:
     image: apache_rosbridge_win:noetic
     security_opt:
       - seccomp:unconfined
     ports:
       - "9990:9990"
     depends_on:
-      - web
+      - webserver
     command: [ "/runshell/run_rosbridge_ssl.sh", "${BRIDGE_MASTER:-http://localhost:11311}", "${BRIDGE_HOSTNAME:-0.0.0.0}", "${BRIDGE_PORT:-9990}" ]
 #    network_mode: ${NETWORK_MODE:-host}

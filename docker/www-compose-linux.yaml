@@ -6,8 +6,8 @@
 # NETWORK_MODE (default: host)
 version: "3.0"
 services:
-  web:
-    image: apache_rosbridge_win:noetic
+  webserver:
+    image: apache_rosbridge:noetic
     # ipc: host
     security_opt:
       - seccomp:unconfined
@@ -15,13 +15,22 @@ services:
       - "80:80"
       - "443:443"
     command: [ "/runshell/run_apache.sh", "${WEB_HOSTNAME:-0.0.0.0}" ]
-  bridge:
-    image: apache_rosbridge_win:noetic
+    volumes:
+      - "${PWD}/userdir/server.key:/irsl_security/server.key"
+      - "${PWD}/userdir/server.crt:/irsl_security/server.crt"
+      - "${PWD}/sites-available:/etc/apache2/sites-available"
+      - "${PWD}/userdir:/runshell"
+      - "${PWD}/../html:/var/www/html"
+  rosbridge:
+    image: apache_rosbridge:noetic
     security_opt:
       - seccomp:unconfined
     ports:
       - "9909:9909"
     depends_on:
-      - web
+      - webserver
     command: [ "/runshell/run_rosbridge.sh", "${BRIDGE_MASTER:-http://localhost:11311}", "${BRIDGE_HOSTNAME:-0.0.0.0}", "${BRIDGE_PORT:-9909}" ]
-#    network_mode: ${NETWORK_MODE:-host}
+    volumes:
+      - "${PWD}/userdir:/runshell"
+      - "${PWD}/../script:/userdir"
+    network_mode: ${NETWORK_MODE:-host}

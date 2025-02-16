@@ -1,0 +1,27 @@
+### Environment variables
+# WEB_HOSTNAME (default: 0.0.0.0)
+# BRIDGE_MASTER (default: http://localhost:11311)
+# BRIDGE_HOSTNAME (default: 0.0.0.0)
+# BRIDGE_PORT (default: 9909)
+# NETWORK_MODE (default: host)
+version: "3.0"
+services:
+  webserver:
+    image: apache_rosbridge_win:noetic
+    # ipc: host
+    security_opt:
+      - seccomp:unconfined
+    ports:
+      - "80:80"
+      - "443:443"
+    command: [ "/runshell/run_apache.sh", "${WEB_HOSTNAME:-0.0.0.0}" ]
+  rosbridge:
+    image: apache_rosbridge_win:noetic
+    security_opt:
+      - seccomp:unconfined
+    ports:
+      - "9909:9909"
+    depends_on:
+      - webserver
+    command: [ "/runshell/run_rosbridge.sh", "${BRIDGE_MASTER:-http://localhost:11311}", "${BRIDGE_HOSTNAME:-0.0.0.0}", "${BRIDGE_PORT:-9909}" ]
+#    network_mode: ${NETWORK_MODE:-host}
