@@ -1,0 +1,80 @@
+### Environment variables
+# WEB_HOSTNAME (default: 0.0.0.0)
+# BRIDGE_MASTER (default: http://localhost:11311)
+# BRIDGE_HOSTNAME (default: 0.0.0.0)
+# BRIDGE_PORT (default: 9990)
+# NETWORK_MODE (default: host)
+version: "3.0"
+services:
+  webserver:
+    image: apache_rosbridge:one
+    # ipc: host
+    security_opt:
+      - seccomp:unconfined
+    ports:
+      - "80:80"
+      - "443:443"
+    command: [ "/runshell/run_apache.sh", "${WEB_HOSTNAME:-0.0.0.0}" ]
+    volumes:
+      - "${PWD}/userdir/server.key:/irsl_security/server.key"
+      - "${PWD}/userdir/server.crt:/irsl_security/server.crt"
+      - "${PWD}/userdir:/runshell"
+      - "${PWD}/sites-available:/etc/apache2/sites-available"
+      - "${PWD}/../html:/var/www/html"
+  rosbridge:
+    image: apache_rosbridge:one
+    security_opt:
+      - seccomp:unconfined
+    ports:
+      - "9990:9990"
+    depends_on:
+      - webserver
+    command: [ "/runshell/run_rosbridge_ssl.sh", "${BRIDGE_MASTER:-http://rosbridge:11311}", "${BRIDGE_HOSTNAME:-rosbridge}", "${BRIDGE_PORT:-9990}" ]
+    volumes:
+      - "${PWD}/userdir/server.key:/irsl_security/server.key"
+      - "${PWD}/userdir/server.crt:/irsl_security/server.crt"
+      - "${PWD}/userdir:/runshell"
+      - "${PWD}/../script:/userdir"
+  xserver:
+    image: ${REPO:-irslrepo/}browser_vnc:20.04
+    # ipc: host
+    security_opt:
+      - seccomp:unconfined
+    ports:
+      - "${VNC_PORT:-9999}:80"
+    command: [ supervisord, -c, /app/supervisord.conf ]
+    environment:
+      - DISPLAY=:${DOCKER_DISPLAY:-10}
+    healthcheck:
+      test: ["CMD-SHELL", "test -e /tmp/.X11-unix/X${DOCKER_DISPLAY:-10}"]
+      interval: "2s"
+      retries: 20
+    volumes:
+      - '/tmp/.X11-unix:/tmp/.X11-unix'
+    depends_on:
+      - rosbridge
+  maincontents:
+    image: ${repo:-irslrepo/}${arg_image:-irsl_mobile_arm:noetic}
+    security_opt:
+      - seccomp:unconfined
+    ports:
+      - "${jupyter_port:-8888}:8888"
+    command: [ "roslaunch", "irsl_mobile_arm", "run_base.launch", "run_gazebo:=true", "use_arm:=true"]
+    environment:
+      - DISPLAY=:${DOCKER_DISPLAY:-10}
+      - VGL_DISPLAY=${VGL_DISPLAY-:0}
+      - DOCKER_ROS_SETUP=${DOCKER_ROS_SETUP:-/irsl_ws/devel/setup.bash}
+      - ROS_HOSTNAME=${ARG_ROS_IP:-maincontents}
+      - ROS_MASTER_URI=${ARG_ROS_MASTER_URI:-http://rosbridge:11311}
+    working_dir: /userdir
+    user: "${DOCKER_USER:-0}:${DOCKER_GROUP:-0}"
+    volumes:
+      - '${USER_DIR:-~/docker_userdir}:/userdir'
+      - '/tmp/.X11-unix:/tmp/.X11-unix'
+    depends_on:
+      - xserver
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu, compute, graphics, utility, display]
