@@ -1,7 +1,9 @@
 #!/bin/bash
 
+_WEB_HOSTNAME=${1:-"0,0,0,0"}
+
 ##
-echo "serverName simserver.irsl.eiiris.tut.ac.jp" > /etc/apache2/conf-available/fqdn.conf
+echo "serverName ${_WEB_HOSTNAME}" > /etc/apache2/conf-available/fqdn.conf
 
 ##
 /usr/sbin/a2enconf fqdn && \
