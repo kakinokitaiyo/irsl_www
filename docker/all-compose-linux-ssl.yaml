@@ -6,8 +6,9 @@
 # NETWORK_MODE (default: host)
 version: "3.0"
 services:
+### webserver from irsl_www
   webserver:
-    image: apache_rosbridge:one
+    image: ${REPO:-irslrepo/}apache_rosbridge:noetic
     # ipc: host
     security_opt:
       - seccomp:unconfined
@@ -21,20 +22,25 @@ services:
       - "${PWD}/userdir:/runshell"
       - "${PWD}/sites-available:/etc/apache2/sites-available"
       - "${PWD}/../html:/var/www/html"
+### rosbridge from irsl_www
   rosbridge:
-    image: apache_rosbridge:one
+    image: ${REPO:-irslrepo/}apache_rosbridge:noetic
     security_opt:
       - seccomp:unconfined
     ports:
       - "9990:9990"
-    depends_on:
-      - webserver
     command: [ "/runshell/run_rosbridge_ssl.sh", "${BRIDGE_MASTER:-http://rosbridge:11311}", "${BRIDGE_HOSTNAME:-rosbridge}", "${BRIDGE_PORT:-9990}" ]
+    healthcheck:
+      test: ["CMD-SHELL", "test $(ps ax | grep server/rosbridge_websocket | wc -l) -gt 1" ]
+      start_period: 10s
+      interval: 20s
+      retries: 6
     volumes:
       - "${PWD}/userdir/server.key:/irsl_security/server.key"
       - "${PWD}/userdir/server.crt:/irsl_security/server.crt"
       - "${PWD}/userdir:/runshell"
       - "${PWD}/../script:/userdir"
+### xserver from irsl_docker_irsl_system
   xserver:
     image: ${REPO:-irslrepo/}browser_vnc:20.04
     # ipc: host
@@ -47,32 +53,57 @@ services:
       - DISPLAY=:${DOCKER_DISPLAY:-10}
     healthcheck:
       test: ["CMD-SHELL", "test -e /tmp/.X11-unix/X${DOCKER_DISPLAY:-10}"]
-      interval: "2s"
-      retries: 20
+      start_period: 10s
+      interval: 10s
+      retries: 6
     volumes:
       - '/tmp/.X11-unix:/tmp/.X11-unix'
-    depends_on:
-      - rosbridge
-  maincontents:
-    image: ${repo:-irslrepo/}${arg_image:-irsl_mobile_arm:noetic}
+### jupyter from irsl_docker_irsl_system
+  jupyter:
+    image: ${REPO:-irslrepo/}irsl_mobile_arm:noetic
     security_opt:
       - seccomp:unconfined
     ports:
-      - "${jupyter_port:-8888}:8888"
+      - "${JUPYTER_PORT:-8888}:8888"
+    command: [ "jupyter", "lab", "--allow-root", "--no-browser", "--ip=0.0.0.0", "--port=8888", "--ServerApp.token='${JUPYTER_TOKEN}'", "--FileCheckpoints.checkpoint_dir=/tmp" ]
+    environment:
+      - DISPLAY=:${DOCKER_DISPLAY:-10}
+      - VGL_DISPLAY=${VGL_DISPLAY-:0}
+      - DOCKER_ROS_SETUP=${DOCKER_ROS_SETUP:-/irsl_ws/devel/setup.bash}
+      - ROS_HOSTNAME=${ARG_ROS_IP:-maincontents}
+      - ROS_MASTER_URI=${ARG_ROS_MASdeTER_URI:-http://rosbridge:11311}
+    working_dir: /userdir
+    user: "${DOCKER_USER:-0}:${DOCKER_GROUP:-0}"
+    volumes:
+      - '${USER_DIR:-~/docker_userdir}:/userdir'
+      - '/tmp/.X11-unix:/tmp/.X11-unix'
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu, compute, graphics, utility, display]
+### maincontenst from irsl_mobile_arm
+  maincontents:
+    image: ${REPO:-irslrepo/}irsl_mobile_arm:noetic
+    security_opt:
+      - seccomp:unconfined
     command: [ "roslaunch", "irsl_mobile_arm", "run_base.launch", "run_gazebo:=true", "use_arm:=true"]
     environment:
       - DISPLAY=:${DOCKER_DISPLAY:-10}
       - VGL_DISPLAY=${VGL_DISPLAY-:0}
       - DOCKER_ROS_SETUP=${DOCKER_ROS_SETUP:-/irsl_ws/devel/setup.bash}
       - ROS_HOSTNAME=${ARG_ROS_IP:-maincontents}
-      - ROS_MASTER_URI=${ARG_ROS_MASTER_URI:-http://rosbridge:11311}
+      - ROS_MASTER_URI=${ARG_ROS_MASdeTER_URI:-http://rosbridge:11311}
     working_dir: /userdir
     user: "${DOCKER_USER:-0}:${DOCKER_GROUP:-0}"
     volumes:
       - '${USER_DIR:-~/docker_userdir}:/userdir'
       - '/tmp/.X11-unix:/tmp/.X11-unix'
     depends_on:
-      - xserver
+      xserver:
+        condition: service_healthy
+      rosbridge:
+        condition: service_healthy
     deploy:
       resources:
         reservations:
