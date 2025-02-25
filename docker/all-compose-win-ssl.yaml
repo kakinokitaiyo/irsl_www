@@ -58,7 +58,6 @@ services:
       - "${JUPYTER_PORT:-8888}:8888"
     command: [ "jupyter", "lab", "--allow-root", "--no-browser", "--ip=0.0.0.0", "--port=8888", "--ServerApp.token='${JUPYTER_TOKEN}'", "--FileCheckpoints.checkpoint_dir=/tmp" ]
     environment:
-    environment:
       - DISPLAY=:${DOCKER_DISPLAY:-10}
       - VGL_DISPLAY=${VGL_DISPLAY-:0}
       - DOCKER_ROS_SETUP=${DOCKER_ROS_SETUP:-/irsl_ws/devel/setup.bash}
