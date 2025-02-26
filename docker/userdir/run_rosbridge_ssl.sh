@@ -5,7 +5,9 @@ _ADDRESS=${2:-simserver.irsl.eiiris.tut.ac.jp}
 _PORT=${3:-9990}
 
 unset ROS_IP
-export ROS_HOSTNAME=${_ADDRESS}
+if [ -z "$ROS_HOSTNAME" ]; then
+    export ROS_HOSTNAME=${_ADDRESS}
+fi
 export ROS_MASTER_URI=${_ROSMASTER}
 
 roslaunch rosbridge_server rosbridge_websocket.launch \

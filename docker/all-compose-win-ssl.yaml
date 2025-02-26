@@ -23,9 +23,9 @@ services:
       - seccomp:unconfined
     ports:
       - "9990:9990"
-    depends_on:
-      - webserver
-    command: [ "/runshell/run_rosbridge_ssl.sh", "${BRIDGE_MASTER:-http://localhost:11311}", "${BRIDGE_HOSTNAME:-0.0.0.0}", "${BRIDGE_PORT:-9990}" ]
+    environment:
+      - ROS_HOSTNAME=rosbridge
+    command: [ "/runshell/run_rosbridge_ssl.sh", "${BRIDGE_MASTER:-http://rosbridge:11311}", "${BRIDGE_HOSTNAME:-0.0.0.0}", "${BRIDGE_PORT:-9990}" ]
     healthcheck:
       test: ["CMD-SHELL", "test $(ps ax | grep server/rosbridge_websocket | wc -l) -gt 1" ]
       start_period: 10s
