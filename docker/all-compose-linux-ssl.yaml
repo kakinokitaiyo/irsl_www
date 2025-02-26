@@ -70,8 +70,8 @@ services:
       - DISPLAY=:${DOCKER_DISPLAY:-10}
       - VGL_DISPLAY=${VGL_DISPLAY-:0}
       - DOCKER_ROS_SETUP=${DOCKER_ROS_SETUP:-/irsl_ws/devel/setup.bash}
-      - ROS_HOSTNAME=${ARG_ROS_IP:-maincontents}
-      - ROS_MASTER_URI=${ARG_ROS_MASdeTER_URI:-http://rosbridge:11311}
+      - ROS_HOSTNAME=jupyter
+      - ROS_MASTER_URI=${ARG_ROS_MASTER_URI:-http://rosbridge:11311}
     working_dir: /userdir
     user: "${DOCKER_USER:-0}:${DOCKER_GROUP:-0}"
     volumes:
@@ -92,8 +92,8 @@ services:
       - DISPLAY=:${DOCKER_DISPLAY:-10}
       - VGL_DISPLAY=${VGL_DISPLAY-:0}
       - DOCKER_ROS_SETUP=${DOCKER_ROS_SETUP:-/irsl_ws/devel/setup.bash}
-      - ROS_HOSTNAME=${ARG_ROS_IP:-maincontents}
-      - ROS_MASTER_URI=${ARG_ROS_MASdeTER_URI:-http://rosbridge:11311}
+      - ROS_HOSTNAME=maincontents
+      - ROS_MASTER_URI=${ARG_ROS_MASTER_URI:-http://rosbridge:11311}
     working_dir: /userdir
     user: "${DOCKER_USER:-0}:${DOCKER_GROUP:-0}"
     volumes:
