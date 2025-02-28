@@ -59,7 +59,7 @@ services:
     command: [ "jupyter", "lab", "--allow-root", "--no-browser", "--ip=0.0.0.0", "--port=8888", "--ServerApp.token='${JUPYTER_TOKEN}'", "--FileCheckpoints.checkpoint_dir=/tmp" ]
     environment:
       - DISPLAY=:${DOCKER_DISPLAY:-10}
-      - VGL_DISPLAY=${VGL_DISPLAY-:0}
+      # - VGL_DISPLAY=${VGL_DISPLAY-:0}
       - DOCKER_ROS_SETUP=${DOCKER_ROS_SETUP:-/irsl_ws/devel/setup.bash}
       - ROS_HOSTNAME=jupyter
       - ROS_MASTER_URI=${ARG_ROS_MASTER_URI:-http://rosbridge:11311}
@@ -75,7 +75,7 @@ services:
     command: [ "roslaunch", "irsl_mobile_arm", "run_base.launch", "run_gazebo:=true", "use_arm:=true"]
     environment:
       - DISPLAY=:${DOCKER_DISPLAY:-10}
-      - VGL_DISPLAY=${VGL_DISPLAY-:0}
+      # - VGL_DISPLAY=${VGL_DISPLAY-:0}
       - DOCKER_ROS_SETUP=${DOCKER_ROS_SETUP:-/irsl_ws/devel/setup.bash}
       - ROS_HOSTNAME=maincontents
       - ROS_MASTER_URI=${ARG_ROS_MASTER_URI:-http://rosbridge:11311}
