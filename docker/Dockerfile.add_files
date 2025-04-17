@@ -3,12 +3,32 @@ FROM ${BASE_IMAGE}
 
 ARG COMMON_NAME="eiiris.tut.ac.jp"
 
+<<<<<<< HEAD
+# セキュリティ証明書の作成
+WORKDIR /irsl_security
+=======
 WORKDIR /irsl_security
 
+>>>>>>> 98b620646ac4cbef49a4f8822713511ee489ecfb
 RUN openssl genrsa -out server.key 2048
 RUN openssl req -out server.csr -key server.key -new -subj "/C=JP/ST=Aichi/O=IRSL/CN=${COMMON_NAME}"
 RUN openssl x509 -req -days 3650 -signkey server.key -in server.csr -out server.crt
 
+<<<<<<< HEAD
+# スクリプト系（Launchなど）
+COPY docker/userdir /runshell
+
+# arm_splitter_node.py を含む script ディレクトリを /opt/scripts にコピー
+RUN mkdir -p /opt/scripts
+COPY script/arm_splitter_node.py /opt/scripts/
+RUN chmod +x /opt/scripts/arm_splitter_node.py
+
+# Apache関連ファイルの配置
+RUN rm -rf /var/www/html/*
+COPY html /var/www/html
+COPY docker/sites-available /etc/apache2/sites-available
+
+=======
 COPY docker/userdir /runshell
 
 COPY script /userdir
@@ -17,3 +37,4 @@ RUN rm -rf /var/www/html/*
 COPY html /var/www/html
 
 COPY docker/sites-available /etc/apache2/sites-available
+>>>>>>> 98b620646ac4cbef49a4f8822713511ee489ecfb

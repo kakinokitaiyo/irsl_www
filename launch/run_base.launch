@@ -1,0 +1,113 @@
+<launch>
+  <!-- this launch provides almost the same robot API in gazebo world
+       as aero_startup/aero_bringup.launch -->
+  <!-- these are the arguments you can pass this launch file, for example PAUSED:=true -->
+  <arg name="GUI"      default="true"/>
+  <arg name="HEADLESS" default="false"/>
+  <arg name="PAUSED"   default="false"/>
+  <arg name="WORLD_FILE" default="$(find irsl_mobile_arm)/world/aero_shelf.world"/>
+  <arg name="run_gazebo"     default="false" />
+  <arg name="use_sim_time"   default="true"/>
+  <arg name="debug"          default="false"/>
+  <arg name="use_dummy_odom" default="false" />
+  <arg name="use_odom_trajectory" default="true" />
+  <arg name="making_map"     default="false" />
+  <arg name="rviz"           default="true" />
+  <arg name="use_arm"        default="false" />
+  <arg name="control_namespace" default="/" />
+  <arg name="control_config"    default="$(find irsl_mobile_arm)/config/roscontrol_config.yaml" />
+  <arg name="controllers"       default="joint_state_controller arm_controller gripper_controller" />
+  <arg name="use_rosbridge" default="false" />
+  <arg name="wsaddr" default="localhost" />
+  <arg name="wsport" default="9909" />
+  <env name="GAZEBO_MODEL_PATH" value="$(find irsl_mobile_arm)/gazebo_models" />
+
+  <!-- We resume the logic in empty_world.launch, changing only the name of the world to be launched -->
+  <include file="$(find gazebo_ros)/launch/empty_world.launch"
+           if="$(arg run_gazebo)" >
+    <arg name="world_name"   value="$(arg WORLD_FILE)"/>
+    <arg name="gui"          value="$(arg GUI)" />
+    <arg name="paused"       value="$(arg PAUSED)"/>
+    <arg name="headless"     value="$(arg HEADLESS)"/>
+    <arg name="use_sim_time" value="$(arg use_sim_time)"/>
+    <arg name="debug"        value="$(arg debug)" />
+  </include>
+  <!-- -->
+  <group unless="$(arg use_arm)">
+  <!-- Load the URDF into the ROS Parameter Server -->
+  <param name="robot_description"
+         textfile="$(find irsl_mobile_arm)/model/simple_move.urdf"
+         unless="$(arg use_dummy_odom)" />
+  <param name="robot_description"
+         textfile="$(find irsl_mobile_arm)/model/simple_move.dummy_odom.urdf"
+         if="$(arg use_dummy_odom)" />
+  <!-- Run a python script to the send a service call to gazebo_ros to spawn a URDF robot -->
+  <node name="urdf_spawner" pkg="gazebo_ros" type="spawn_model"
+        respawn="false" output="screen"
+        args="-urdf -model simple_move -param robot_description"
+        if="$(arg run_gazebo)" />
+  </group>
+  <!-- -->
+  <group if="$(arg use_arm)">
+  <!-- Load the URDF into the ROS Parameter Server -->
+  <param name="robot_description"
+         textfile="$(find irsl_mobile_arm)/model/base_arm.urdf"
+         unless="$(arg use_dummy_odom)" />
+  <param name="robot_description"
+         textfile="$(find irsl_mobile_arm)/model/simple_move.dummy_odom.urdf"
+         if="$(arg use_dummy_odom)" />
+  <!-- Run a python script to the send a service call to gazebo_ros to spawn a URDF robot -->
+  <node name="urdf_spawner" pkg="gazebo_ros" type="spawn_model"
+        respawn="false" output="screen"
+        args="-urdf -model base_arm -param robot_description"
+        if="$(arg run_gazebo)" />
+  <!-- ROS Control -->
+  <group ns="$(arg control_namespace)">
+    <rosparam file="$(arg control_config)" command="load"/>
+    <!-- load the controllers -->
+    <node name="robot_controller_spawner" pkg="controller_manager"
+          type="spawner" output="screen" respawn="true"
+          args="$(arg controllers)"/>
+  </group>
+  </group>
+
+  <node name="simple_move_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" />
+
+  <group if="$(arg use_dummy_odom)">
+    <node name="dummy_odom_publisher" pkg="irsl_mobile_arm" type="dummy_odom_node.py"/>
+  </group>
+  <group if="$(arg use_odom_trajectory)">
+    <node name="omni_base_controller" pkg="irsl_mobile_arm" type="odom_trajectory_to_twist_server.py"/>
+  </group>
+
+  <include file="$(find irsl_mobile_arm)/launch/static_map_navigation.launch"
+           unless="$(arg making_map)">
+    <arg name="map_file" value="$(find irsl_mobile_arm)/map/map.yaml" />
+  </include>
+
+  <group if="$(arg making_map)" >
+    <include file="$(find irsl_mobile_arm)/launch/gmapping.launch" />
+    <include file="$(find irsl_mobile_arm)/launch/move_base.launch" />
+  </group>
+
+  <node name="rviz" pkg="rviz" type="rviz"
+        args="-d $(find irsl_mobile_arm)/config/simple_move.rviz"
+        if="$(arg rviz)" />
+
+  <include file="$(find irsl_mobile_arm)/launch/teleop_webjoy.launch" />
+
+  <include file="$(find rosbridge_server)/launch/rosbridge_websocket.launch"
+           if="$(arg use_rosbridge)" >
+    <arg name="address" value="$(arg wsaddr)" />
+    <arg name="port" value="$(arg wsport)" />
+    <arg name="ssl"  value="true" />
+    <arg name="certfile" value="/irsl_security/server.crt" />
+    <arg name="keyfile"  value="/irsl_security/server.key" />
+  </include>
+
+    <!-- arm_splitter_node を起動 -->
+  <node name="arm_splitter_node" pkg="irsl_mobile_arm" type="arm_splitter_node.py"
+        output="screen" cwd="node" />
+    <env name="PYTHONUNBUFFERED" value="1"/>
+
+</launch>

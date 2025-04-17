@@ -68,6 +68,20 @@
       <!-- H3><div class="image-name" >Base</div></H3 -->
       <img id="rosimg" src="" />
     </div>
+
+    <div style="padding: 10px; background: rgba(255, 255, 255, 0.2);">
+        <h3>関節スライダー</h3>
+        <div><label>BASE_Y</label><input id="slider-base-y" type="range" min="-1" max="1" step="0.01" value="0"></div>
+        <div><label>BASE_P</label><input id="slider-base-p" type="range" min="-1" max="1" step="0.01" value="0"></div>
+        <div><label>BASE_R</label><input id="slider-base-r" type="range" min="-1" max="1" step="0.01" value="0"></div>
+        <div><label>ELBOW_Y</label><input id="slider-elbow-y" type="range" min="-1" max="1" step="0.01" value="0"></div>
+        <div><label>ELBOW_P</label><input id="slider-elbow-p" type="range" min="-1" max="1" step="0.01" value="0"></div>
+        <div><label>WRIST_Y</label><input id="slider-wrist-y" type="range" min="-1" max="1" step="0.01" value="0"></div>
+        <div><label>WRIST_P</label><input id="slider-wrist-p" type="range" min="-1" max="1" step="0.01" value="0"></div>
+        <div><label>GRIPPER0</label><input id="slider-gripper0" type="range" min="-1" max="1" step="0.01" value="0"></div>
+        <div><label>GRIPPER1</label><input id="slider-gripper1" type="range" min="-1" max="1" step="0.01" value="0"></div>
+      </div>
+      
     <div class="footer" id="joy_zone"> </div>
   </section>
   <!-- https://github.com/yoannmoinet/nipplejs -->
@@ -167,5 +181,69 @@
         }
     });
   </script>
+
+<script>
+  // 関節名とスライダーのID（9軸）
+  const jointSliderIDs = [
+  "slider-base-y",  // 0 => BASE_Y
+  "slider-base-p",  // 1 => BASE_P
+  "slider-base-r",  // 2 => BASE_R
+  "slider-elbow-y", // 3 => ELBOW_Y
+  "slider-elbow-p", // 4 => ELBOW_P
+  "slider-wrist-y", // 5 => WRIST_Y
+  "slider-wrist-p", // 6 => WRIST_P
+  "slider-gripper0",// 7 => GRIPPER0
+  "slider-gripper1" // 8 => GRIPPER1
+  ];
+
+
+  const angleMax = 1.57;
+
+  const armPublisher = new ROSLIB.Topic({
+    ros: ros,
+    name: "/arm_controller/input",  
+    messageType: "std_msgs/Float64MultiArray"
+  });
+
+  function publishFullState() {
+    const angles = jointSliderIDs.map(id => {
+      const slider = document.getElementById(id);
+      // スライダーがなかったら0.0を代入
+      return slider ? parseFloat(slider.value) * angleMax : 0.0;
+    });
+
+    // デバッグ出力（必要に応じて削除OK）
+    if (angles.length !== 9) {
+      console.warn(`⚠️ Warning: 送信軸数が9ではありません → ${angles.length}軸`);
+    }
+
+    const msg = new ROSLIB.Message({ data: angles });
+    armPublisher.publish(msg);
+    console.log(`[Sliders] Published: ${angles.map(a => a.toFixed(2)).join(", ")}`);
+  }
+
+  function setupSliders() {
+  jointSliderIDs.forEach(id => {
+    const slider = document.getElementById(id);
+    if (slider) {
+      slider.addEventListener("input", publishFullState);
+      slider.addEventListener("change", publishFullState);  // ←これを追加
+    }
+  });
+}
+
+
+
+
+
+  window.addEventListener("load", () => {
+  setupSliders();
+  publishFullState(); // ← ページ読み込み時に一度9軸分の初期値を送信
+  });
+</script>
+
+
+
+  
 </body>
 </html>

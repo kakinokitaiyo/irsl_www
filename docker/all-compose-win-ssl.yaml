@@ -6,16 +6,17 @@
 # NETWORK_MODE (default: host)
 version: "3.0"
 services:
-### webserver from irsl_www
   webserver:
     image: ${REPO:-irslrepo/}apache_rosbridge_win:noetic
-    # ipc: host
     security_opt:
       - seccomp:unconfined
     ports:
       - "80:80"
       - "443:443"
     command: [ "/runshell/run_apache.sh", "${WEB_HOSTNAME:-0.0.0.0}" ]
+    volumes:
+      - ~/irsl_www/html:/var/www/html  # ホストとコンテナを同期
+
 ### rosbridge from irsl_www
   rosbridge:
     image: ${REPO:-irslrepo/}apache_rosbridge_win:noetic
@@ -72,7 +73,8 @@ services:
     image: ${REPO:-irslrepo/}irsl_mobile_arm:noetic
     security_opt:
       - seccomp:unconfined
-    command: [ "roslaunch", "irsl_mobile_arm", "run_base.launch", "run_gazebo:=true", "use_arm:=true"]
+    command: [ "roslaunch", "irsl_mobile_arm", "run_base.launch", "run_gazebo:=true", "use_arm:=true" ]
+
     environment:
       - DISPLAY=:${DOCKER_DISPLAY:-10}
       # - VGL_DISPLAY=${VGL_DISPLAY-:0}
@@ -82,8 +84,12 @@ services:
     working_dir: /userdir
     user: "${DOCKER_USER:-0}:${DOCKER_GROUP:-0}"
     volumes:
-      - '${USER_DIR:-~/docker_userdir}:/userdir'
+      - ~/irsl_www:/userdir
+      - ~/irsl_www/script/:/irsl_ws/src/irsl_mobile_arm/script
+      - ~/irsl_www/CMakeLists.txt:/irsl_ws/src/irsl_mobile_arm/CMakeLists.txt
+      - ~/irsl_www/launch/run_base.launch:/irsl_ws/src/irsl_mobile_arm/launch/run_base.launch
       - 'tmpdir:/tmp/.X11-unix'
+
     depends_on:
       xserver:
         condition: service_healthy
