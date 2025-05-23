@@ -9,12 +9,12 @@
 
 SSL の場合
 ``` bash
-docker compose -f docker-compose-linux-ssl.yaml up
+docker compose -f www-compose-linux-ssl.yaml up
 ```
 
 通常の場合
 ``` bash
-docker compose -f docker-compose-linux.yaml up
+docker compose -f www-compose-linux.yaml up
 ```
 
 ### compose.yaml の パラメータ(環境変数として設定)
