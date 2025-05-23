@@ -68,6 +68,37 @@ https://$$HOSTNAME$$/touch/touch.html?wsport=9990&wsaddr=$$HOSTNAME$$&ssl=1
 ../script/sub_writing.py を参照
 
 
+## ロボットを動かすメッセージ型に変換する方法
+/irsl_www/script/joy_to_cmdvel.py　を実行する
+```
+python3 joy_to_cmdvel.py
+```
+
+## その他
+### ロボットが/cmd_velを購読しているか確認
+```
+source /opt/ros/noetic/setup.bash
+rostopic info /webjoy
+rostopic info /cmd_vel
+```
+
+### ROS_MASTER_URIやROS_IPの設定
+### あなたのPC（or Dockerコンテナ）
+```
+export ROS_MASTER_URI=http://<ロボットのip>:11311
+export ROS_IP=<あなたのPCのip>
+```
+### ロボット側
+```
+export ROS_MASTER_URI=http://<ロボットのIP>:11311
+export ROS_IP=<ロボットのIP>
+
+```
+
+### 予定している流れ
+[rosbridge_websocket] → /webjoy → [joy_to_cmdvel] → /cmd_vel → [ロボット制御ノード]
+
+
 # 以下は古い情報
 # Apache と rosbridge_server を使って browser からrostopicを送る
 
