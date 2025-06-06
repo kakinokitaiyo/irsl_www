@@ -2,18 +2,28 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>Virtual Joy UI</title>
+  <title>Virtual Joy + Joint UI</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     html, body {
       height: 100%;
       margin: 0;
+      display: flex;
+      flex-direction: column;
     }
     #joy_zone {
+      flex: 1;
       width: 100%;
-      height: 100%;
       background: rgba(200, 200, 255, 0.1);
       position: relative;
+    }
+    #sliders {
+      padding: 10px;
+      background: #f0f0f0;
+    }
+    label {
+      display: inline-block;
+      width: 80px;
     }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/roslib@1/build/roslib.min.js"></script>
@@ -22,32 +32,45 @@
 
 <body>
   <div id="joy_zone"></div>
+  <div id="sliders"></div>
 
   <script>
+    // === ROS接続 ===
+    // === ROS接続（プロトコルでSSL/非SSL自動切替） ===
     const ros = new ROSLIB.Ros({
-      url: "ws://localhost:9909"  // 必要に応じて wss://... に変更
+      url: (location.protocol === 'https:')
+        ? 'wss://133.15.97.64:9990'
+        : 'ws://133.15.97.64:9909'
     });
 
-    const joytopic = new ROSLIB.Topic({
+
+
+    // === cmd_vel Publisher ===
+    const twistTopic = new ROSLIB.Topic({
       ros: ros,
-      name: "/webjoy",
-      messageType: "sensor_msgs/Joy"
+      name: "/cmd_vel",
+      messageType: "geometry_msgs/Twist"
     });
 
+    // === joint_controller Publisher ===
+    const jointPublisher = new ROSLIB.Topic({
+      ros: ros,
+      name: "/Frame_Short/joint_controller/command",
+      messageType: "std_msgs/Float64MultiArray"
+    });
+
+    // === ジョイスティック処理 ===
     const half_width = window.innerWidth / 2;
     let current_right = -1, current_left = -1;
     let cur_x_left = 0.0, cur_y_left = 0.0;
-    let cur_x_right = 0.0, cur_y_right = 0.0;
+    let cur_x_right = 0.0;
 
-    function publishJoy(active) {
-      const axes = [cur_x_left, -cur_y_left, cur_x_right, 0.0]; // [x, y, yaw, unused]
-      const buttons = [0, 0, 0, 0, active ? 1 : 0, 0];
-      const msg = new ROSLIB.Message({
-        header: { frame_id: "webjoy" },
-        axes: axes,
-        buttons: buttons
+    function publishTwist() {
+      const twist = new ROSLIB.Message({
+        linear: { x: cur_y_left, y: cur_x_left, z: 0.0 },
+        angular: { x: 0.0, y: 0.0, z: cur_x_right }
       });
-      joytopic.publish(msg);
+      twistTopic.publish(twist);
     }
 
     nipplejs.create({
@@ -68,24 +91,54 @@
       if (data.identifier === current_right) {
         current_right = -1;
         cur_x_right = 0.0;
-        cur_y_right = 0.0;
       } else if (data.identifier === current_left) {
         current_left = -1;
         cur_x_left = 0.0;
         cur_y_left = 0.0;
       }
-      publishJoy(false);
+      publishTwist();
     })
     .on('move', (evt, data) => {
       if (data.identifier === current_right) {
         cur_x_right = data.vector.x;
-        cur_y_right = data.vector.y;
       } else if (data.identifier === current_left) {
         cur_x_left = data.vector.x;
         cur_y_left = data.vector.y;
       }
-      publishJoy(true);
+      publishTwist();
     });
+
+    // === ジョイント制御スライダー ===
+    const NUM_JOINTS = 5;
+    const sliderValues = new Array(NUM_JOINTS).fill(0.0);
+    const slidersDiv = document.getElementById("sliders");
+
+    function publishJointValues() {
+      const msg = new ROSLIB.Message({
+        data: sliderValues
+      });
+      jointPublisher.publish(msg);
+    }
+
+    for (let i = 0; i < NUM_JOINTS; i++) {
+      const label = document.createElement("label");
+      label.innerText = `joint${i}: `;
+
+      const slider = document.createElement("input");
+      slider.type = "range";
+      slider.min = "-3.14";
+      slider.max = "3.14";
+      slider.step = "0.01";
+      slider.value = "0.0";
+      slider.oninput = (e) => {
+        sliderValues[i] = parseFloat(e.target.value);
+        publishJointValues();
+      };
+
+      slidersDiv.appendChild(label);
+      slidersDiv.appendChild(slider);
+      slidersDiv.appendChild(document.createElement("br"));
+    }
   </script>
 </body>
 </html>

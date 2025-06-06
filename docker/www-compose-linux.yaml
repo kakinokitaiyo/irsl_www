@@ -33,4 +33,6 @@ services:
     volumes:
       - "${PWD}/userdir:/runshell"
       - "${PWD}/../script:/userdir"
+      - "${PWD}/userdir:/runshell"
+      - "${PWD}/../script:/userdir"
     network_mode: ${NETWORK_MODE:-host}

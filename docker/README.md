@@ -68,18 +68,26 @@ https://$$HOSTNAME$$/touch/touch.html?wsport=9990&wsaddr=$$HOSTNAME$$&ssl=1
 ../script/sub_writing.py を参照
 
 
-## ロボットを動かすメッセージ型に変換する方法
-/irsl_www/script/joy_to_cmdvel.py　を実行する
+### base_arm
+通常の場合
 ```
-python3 joy_to_cmdvel.py
+http://$$HOSTNAME$$/base_arm/virtual_joy.html?wsaddr=$$HOSTNAME$$
 ```
+
+SSLの場合
+```
+https://$$HOSTNAME$$/base_arm/virtual_joy.html?wsaddr=$$HOSTNAME$$/&wsport=9990&ssl=1
+```
+十字キーを動かすと```/cmd_vel```がpublishされる
+
+スライダーを動かすと```/Frame_Short/joint_controller/command```がpublishされる
 
 ## その他
 ### ロボットが/cmd_velを購読しているか確認
 ```
 source /opt/ros/noetic/setup.bash
-rostopic info /webjoy
 rostopic info /cmd_vel
+rostopic info /Frame_Short/joint_controller/command
 ```
 
 ### ROS_MASTER_URIやROS_IPの設定
@@ -96,7 +104,20 @@ export ROS_IP=<ロボットのIP>
 ```
 
 ### 予定している流れ
-[rosbridge_websocket] → /webjoy → [joy_to_cmdvel] → /cmd_vel → [ロボット制御ノード]
+[ロボット起動]
+     ↓
+[ROSマスター (133.15.97.73)]ロボットのIP
+     ↓
+[rosbridge_server 起動（Docker）]
+     ↓
+[WebブラウザからHTMLアクセス（133.15.97.64）]自分のパソコンのIP
+     ↓
+[スライダー＆ジョイスティックで /cmd_vel や /joint_controller/command をpublish]
+     ↓
+[ROSトピックにメッセージが届く]
+     ↓
+[ロボットが動作]
+
 
 
 # 以下は古い情報

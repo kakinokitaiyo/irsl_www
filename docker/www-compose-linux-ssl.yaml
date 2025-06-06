@@ -7,7 +7,7 @@
 version: "3.0"
 services:
   webserver:
-    image: apache_rosbridge:one
+    image: apache_rosbridge:noetic
     # ipc: host
     security_opt:
       - seccomp:unconfined
@@ -22,7 +22,7 @@ services:
       - "${PWD}/sites-available:/etc/apache2/sites-available"
       - "${PWD}/../html:/var/www/html"
   rosbridge:
-    image: apache_rosbridge:one
+    image: apache_rosbridge:noetic
     security_opt:
       - seccomp:unconfined
     ports:
