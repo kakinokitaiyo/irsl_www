@@ -100,23 +100,19 @@ export ROS_IP=<あなたのPCのip>
 ```
 export ROS_MASTER_URI=http://<ロボットのIP>:11311
 export ROS_IP=<ロボットのIP>
-
 ```
 
 ### 予定している流れ
-[ロボット起動]
-     ↓
-[ROSマスター (133.15.97.73)]ロボットのIP
-     ↓
-[rosbridge_server 起動（Docker）]
-     ↓
-[WebブラウザからHTMLアクセス（133.15.97.64）]自分のパソコンのIP
-     ↓
-[スライダー＆ジョイスティックで /cmd_vel や /joint_controller/command をpublish]
-     ↓
-[ROSトピックにメッセージが届く]
-     ↓
-[ロボットが動作]
+
+1. **ロボット起動**
+2. **ROSマスター起動**（IP: `133.15.97.73`） ← ロボット側
+3. **rosbridge_server 起動**（Dockerコンテナ上）
+4. **Webブラウザからアクセス**（IP: `133.15.97.64`） ← 自分のPCやスマホ
+5. **スライダー＆ジョイスティック操作で publish**
+   - `/cmd_vel`（移動指令）
+   - `/Frame_Short/joint_controller/command`（関節操作）
+6. **ROSトピックにメッセージが届く**
+7. **ロボットが動作**
 
 
 
