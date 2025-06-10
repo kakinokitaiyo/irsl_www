@@ -37,11 +37,16 @@
   <script>
     // === ROS接続 ===
     // === ROS接続（プロトコルでSSL/非SSL自動切替） ===
+    // URLクエリから wsaddr, wsport, ssl を取得
+    const params = new URLSearchParams(window.location.search);
+    const wsaddr = params.get("wsaddr") || location.hostname;
+    const wsport = params.get("wsport") || (location.protocol === "https:" ? "8443" : "9090");
+    const ssl = params.get("ssl") === "1";
+
     const ros = new ROSLIB.Ros({
-      url: (location.protocol === 'https:')
-        ? 'wss://133.15.97.64:9990'
-        : 'ws://133.15.97.64:9909'
+        url: (ssl ? "wss://" : "ws://") + wsaddr + ":" + wsport
     });
+
 
 
 
