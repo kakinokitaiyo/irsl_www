@@ -1,31 +1,34 @@
-##
-## docker build . -f Dockerfile.apache_rosbridge apache_rosbridge:noetic
-##
 ARG BASE_IMAGE=ros:noetic-ros-base
 FROM ${BASE_IMAGE}
 
 LABEL maintainer="IRSL-tut (https://github.com/IRSL-tut) <faculty@irsl.eiiris.tut.ac.jp>"
-
 SHELL ["/bin/bash", "-c"]
 
-# https://qiita.com/haessal/items/0a83fe9fa1ac00ed5ee9
-ENV DEBCONF_NOWARNINGS=yes
-# https://qiita.com/yagince/items/deba267f789604643bab
-ENV DEBIAN_FRONTEND=noninteractive
-# https://qiita.com/jacob_327/items/e99ca1cf8167d4c1486d
-ENV APT_KEY_DONT_WARN_ON_DANGEROUS_USAGE=1
+# ---- 1) 失効した鍵と古い ROS リポジトリ行を一旦削除 ---------------------------
+RUN set -eux; \
+    rm -f /etc/apt/sources.list.d/ros*.list || true; \
+    rm -f /usr/share/keyrings/ros-archive-keyring.gpg || true
 
-RUN apt update -q -qq && \
-    apt install -q -qq -y curl wget git bc \
-                          vim-tiny net-tools iproute2 traceroute openssl \
-                          apache2 ros-${ROS_DISTRO}-rosbridge-suite && \
+# ---- 2) Ubuntu パッケージだけで update → curl 等を先に入れる ---------------
+RUN apt-get update -qq && \
+    apt-get install -qq -y curl gnupg ca-certificates lsb-release
+
+# ---- 3) 新しい ROS 署名鍵を取得して保存 --------------------------------------
+RUN curl -fsSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key \
+      -o /usr/share/keyrings/ros-archive-keyring.gpg
+
+# ---- 4) ROS リポジトリを新鍵で登録し直し、再度 update ------------------------
+RUN echo "deb [arch=amd64 signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] \
+      http://packages.ros.org/ros/ubuntu $(lsb_release -sc) main" | \
+      tee /etc/apt/sources.list.d/ros1.list && \
+    apt-get update -qq
+
+# ---- 5) 必要パッケージをインストール -----------------------------------------
+RUN apt-get install -qq -y \
+        git wget bc \
+        vim-tiny net-tools iproute2 traceroute openssl \
+        apache2 ros-${ROS_DISTRO}-rosbridge-suite && \
     if [ "${ROS_DISTRO}" != "one" ]; then \
-        apt install -q -qq -y ros-${ROS_DISTRO}-web-video-server; \
+        apt-get install -qq -y ros-${ROS_DISTRO}-web-video-server; \
     fi && \
-    apt clean && \
-    rm -rf /var/lib/apt/lists/
-
-## ENTRYPOINT
-## ENV
-## EXPOSE
-## CMD
+    apt-get clean && rm -rf /var/lib/apt/lists/*

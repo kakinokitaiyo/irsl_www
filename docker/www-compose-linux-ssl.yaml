@@ -35,4 +35,4 @@ services:
       - "${PWD}/userdir/server.crt:/irsl_security/server.crt"
       - "${PWD}/userdir:/runshell"
       - "${PWD}/../script:/userdir"
-##    network_mode: ${NETWORK_MODE:-host}
+    network_mode: ${NETWORK_MODE:-host}
