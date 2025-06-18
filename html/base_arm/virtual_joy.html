@@ -36,19 +36,14 @@
 
   <script>
     // === ROS接続 ===
-    // === ROS接続（プロトコルでSSL/非SSL自動切替） ===
-    // URLクエリから wsaddr, wsport, ssl を取得
     const params = new URLSearchParams(window.location.search);
     const wsaddr = params.get("wsaddr") || location.hostname;
     const wsport = params.get("wsport") || (location.protocol === "https:" ? "8443" : "9090");
     const ssl = params.get("ssl") === "1";
 
     const ros = new ROSLIB.Ros({
-        url: (ssl ? "wss://" : "ws://") + wsaddr + ":" + wsport
+      url: (ssl ? "wss://" : "ws://") + wsaddr + ":" + wsport
     });
-
-
-
 
     // === cmd_vel Publisher ===
     const twistTopic = new ROSLIB.Topic({
@@ -57,12 +52,61 @@
       messageType: "geometry_msgs/Twist"
     });
 
-    // === joint_controller Publisher ===
+    // === joint_controller Publisher (JointTrajectory) ===
     const jointPublisher = new ROSLIB.Topic({
       ros: ros,
       name: "/Frame_Short/joint_controller/command",
-      messageType: "std_msgs/Float64MultiArray"
+      messageType: "trajectory_msgs/JointTrajectory"
     });
+
+    const jointNames = ["joint1", "joint2", "joint3", "joint4", "joint0"];
+    const sliderValues = new Array(jointNames.length).fill(0.0);
+    const slidersDiv = document.getElementById("sliders");
+
+    function publishJointValues() {
+      const msg = new ROSLIB.Message({
+        header: {
+          seq: 0,
+          stamp: { secs: 0, nsecs: 0 },
+          frame_id: ""
+        },
+        joint_names: jointNames,
+        points: [
+          {
+            positions: sliderValues,
+            velocities: [],
+            accelerations: [],
+            effort: [],
+            time_from_start: {
+              secs: 5,
+              nsecs: 0
+            }
+          }
+        ]
+      });
+      jointPublisher.publish(msg);
+    }
+
+    // === スライダーUI生成 ===
+    for (let i = 0; i < jointNames.length; i++) {
+      const label = document.createElement("label");
+      label.innerText = `${jointNames[i]}: `;
+
+      const slider = document.createElement("input");
+      slider.type = "range";
+      slider.min = "-3.14";
+      slider.max = "3.14";
+      slider.step = "0.01";
+      slider.value = "0.0";
+      slider.oninput = (e) => {
+        sliderValues[i] = parseFloat(e.target.value);
+        publishJointValues();
+      };
+
+      slidersDiv.appendChild(label);
+      slidersDiv.appendChild(slider);
+      slidersDiv.appendChild(document.createElement("br"));
+    }
 
     // === ジョイスティック処理 ===
     const half_width = window.innerWidth / 2;
@@ -112,38 +156,6 @@
       }
       publishTwist();
     });
-
-    // === ジョイント制御スライダー ===
-    const NUM_JOINTS = 5;
-    const sliderValues = new Array(NUM_JOINTS).fill(0.0);
-    const slidersDiv = document.getElementById("sliders");
-
-    function publishJointValues() {
-      const msg = new ROSLIB.Message({
-        data: sliderValues
-      });
-      jointPublisher.publish(msg);
-    }
-
-    for (let i = 0; i < NUM_JOINTS; i++) {
-      const label = document.createElement("label");
-      label.innerText = `joint${i}: `;
-
-      const slider = document.createElement("input");
-      slider.type = "range";
-      slider.min = "-3.14";
-      slider.max = "3.14";
-      slider.step = "0.01";
-      slider.value = "0.0";
-      slider.oninput = (e) => {
-        sliderValues[i] = parseFloat(e.target.value);
-        publishJointValues();
-      };
-
-      slidersDiv.appendChild(label);
-      slidersDiv.appendChild(slider);
-      slidersDiv.appendChild(document.createElement("br"));
-    }
   </script>
 </body>
 </html>
