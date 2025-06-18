@@ -92,11 +92,13 @@ rostopic info /Frame_Short/joint_controller/command
 
 ### ROS_MASTER_URIやROS_IPの設定
 ### あなたのPC（or Dockerコンテナ）
+yamlで書き換え済み
 ```
 export ROS_MASTER_URI=http://<ロボットのip>:11311
 export ROS_IP=<あなたのPCのip>
 ```
 ### ロボット側
+choreonoid上で打つ場所あり
 ```
 export ROS_MASTER_URI=http://<ロボットのIP>:11311
 export ROS_IP=<ロボットのIP>
@@ -106,13 +108,12 @@ export ROS_IP=<ロボットのIP>
 
 1. **ロボット起動**
 2. **ROSマスター起動**（IP: `133.15.97.73`） ← ロボット側
-3. **rosbridge_server 起動**（Dockerコンテナ上）
-4. **Webブラウザからアクセス**（IP: `133.15.97.64`） ← 自分のPCやスマホ
-5. **スライダー＆ジョイスティック操作で publish**
+3. **Webブラウザからアクセス**（IP: `133.15.97.93`） ← 自分のPCやスマホ
+4. **スライダー＆ジョイスティック操作で publish**
    - `/cmd_vel`（移動指令）
    - `/Frame_Short/joint_controller/command`（関節操作）
-6. **ROSトピックにメッセージが届く**
-7. **ロボットが動作**
+5. **ROSトピックにメッセージが届く**
+6. **ロボットが動作**
 
 
 
