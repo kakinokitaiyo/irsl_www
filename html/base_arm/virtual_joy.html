@@ -23,30 +23,28 @@
       padding: 10px;
       background: #d0f0ff;
       display: flex;
-      align-items: center;
-      justify-content: flex-start;
       flex-wrap: wrap;
+      align-items: center;
       gap: 10px;
+    }
+
+    .speed-block {
+      display: flex;
+      align-items: center;
+      gap: 5px;
     }
 
     input[type="number"] {
       font-size: 20px;
       height: 60px;
-      width: 100px;
+      width: 80px;
     }
 
-    button#inc-speed,
-    button#dec-speed {
+    button {
+      height: 80px;
       width: 100px;
-      height: 60px;
-      font-size: 24px;
+      font-size: 32px;
       font-weight: bold;
-    }
-
-    button#enable-speed {
-      font-size: 20px;
-      height: 60px;
-      width: 120px;
     }
 
     #sliders {
@@ -73,27 +71,13 @@
       height: 40px;
     }
 
-    button.on {
-      background-color: blue;
-      color: white;
-    }
-
-    button.off {
-      background-color: red;
-      color: white;
-    }
-
-    /* ==== スマホ対応用メディアクエリ ==== */
     @media screen and (max-width: 600px) {
       #speed-control {
         flex-direction: column;
         align-items: stretch;
       }
 
-      input[type="number"],
-      button#inc-speed,
-      button#dec-speed,
-      button#enable-speed {
+      input[type="number"], button {
         width: 100%;
         height: 50px;
         font-size: 18px;
@@ -112,23 +96,26 @@
   <div id="joy_zone"></div>
 
   <div id="speed-control">
-    <label for="speed-input">入力速度：</label>
-    <input type="number" id="speed-input" min="0.0" max="1.0" step="0.01" value="0.5">
-    <button id="dec-speed">−</button>
-    <button id="inc-speed">＋</button>
-    <button id="enable-speed" class="off">速度OFF</button>
+    <div class="speed-block">
+      <label for="speed-linear">直進：</label>
+      <input type="number" id="speed-linear" min="0.0" max="1.0" step="0.01" value="0.5">
+      <button id="dec-linear">−</button>
+      <button id="inc-linear">＋</button>
+    </div>
+
+    <div class="speed-block">
+      <label for="speed-angular">回転：</label>
+      <input type="number" id="speed-angular" min="0.0" max="1.0" step="0.01" value="0.5">
+      <button id="dec-angular">−</button>
+      <button id="inc-angular">＋</button>
+    </div>
   </div>
 
   <div id="sliders"></div>
 
   <script>
-    const params = new URLSearchParams(window.location.search);
-    const wsaddr = params.get("wsaddr") || location.hostname || "localhost";
-    const wsport = params.get("wsport") || (location.protocol === "https:" ? "8443" : "9090");
-    const ssl = params.get("ssl") === "1";
-
     const ros = new ROSLIB.Ros({
-      url: (ssl ? "wss://" : "ws://") + wsaddr + ":" + wsport
+      url: "ws://" + (location.hostname || "localhost") + ":9090"
     });
 
     const twistTopic = new ROSLIB.Topic({
@@ -146,21 +133,6 @@
     const jointNames = ["joint1", "joint2", "joint3", "joint4", "joint0"];
     const sliderValues = new Array(jointNames.length).fill(0.0);
     const slidersDiv = document.getElementById("sliders");
-
-    function publishJointValues() {
-      const msg = new ROSLIB.Message({
-        header: { seq: 0, stamp: { secs: 0, nsecs: 0 }, frame_id: "" },
-        joint_names: jointNames,
-        points: [{
-          positions: sliderValues,
-          velocities: [],
-          accelerations: [],
-          effort: [],
-          time_from_start: { secs: 5, nsecs: 0 }
-        }]
-      });
-      jointPublisher.publish(msg);
-    }
 
     for (let i = 0; i < jointNames.length; i++) {
       const row = document.createElement("div");
@@ -185,44 +157,58 @@
       slidersDiv.appendChild(row);
     }
 
-    const speedInput = document.getElementById("speed-input");
-    const incButton = document.getElementById("inc-speed");
-    const decButton = document.getElementById("dec-speed");
-    const enableButton = document.getElementById("enable-speed");
-    let speedEnabled = false;
+    function publishJointValues() {
+      const msg = new ROSLIB.Message({
+        joint_names: jointNames,
+        points: [{
+          positions: sliderValues,
+          time_from_start: { secs: 5, nsecs: 0 }
+        }]
+      });
+      jointPublisher.publish(msg);
+    }
 
-    enableButton.addEventListener("click", () => {
-      speedEnabled = !speedEnabled;
-      enableButton.textContent = speedEnabled ? "速度ON" : "速度OFF";
-      enableButton.className = speedEnabled ? "on" : "off";
-    });
+    const linearInput = document.getElementById("speed-linear");
+    const angularInput = document.getElementById("speed-angular");
 
-    incButton.addEventListener("click", () => {
-      const current = parseFloat(speedInput.value) || 0.0;
-      speedInput.value = Math.min(1.0, current + 0.01).toFixed(2);
-    });
+    // 入力値制限（change時に確認）
+    function clampInput(input) {
+      input.addEventListener("change", () => {
+        let val = parseFloat(input.value);
+        if (isNaN(val)) {
+          input.value = "0.00";
+          return;
+        }
+        input.value = Math.min(1.0, Math.max(0.0, val)).toFixed(2);
+      });
+    }
+    clampInput(linearInput);
+    clampInput(angularInput);
 
-    decButton.addEventListener("click", () => {
-      const current = parseFloat(speedInput.value) || 0.0;
-      speedInput.value = Math.max(0.0, current - 0.01).toFixed(2);
-    });
+    document.getElementById("inc-linear").onclick = () => {
+      let val = parseFloat(linearInput.value) || 0;
+      linearInput.value = Math.min(1.0, val + 0.01).toFixed(2);
+    };
+    document.getElementById("dec-linear").onclick = () => {
+      let val = parseFloat(linearInput.value) || 0;
+      linearInput.value = Math.max(0.0, val - 0.01).toFixed(2);
+    };
+    document.getElementById("inc-angular").onclick = () => {
+      let val = parseFloat(angularInput.value) || 0;
+      angularInput.value = Math.min(1.0, val + 0.01).toFixed(2);
+    };
+    document.getElementById("dec-angular").onclick = () => {
+      let val = parseFloat(angularInput.value) || 0;
+      angularInput.value = Math.max(0.0, val - 0.01).toFixed(2);
+    };
 
     function publishTwist() {
-      const defaultSpeed = 0.5;
-      const userSpeed = parseFloat(speedInput.value) || 0.0;
-      const activeSpeed = speedEnabled ? userSpeed : defaultSpeed;
+      let linear = Math.min(1.0, Math.max(0.0, parseFloat(linearInput.value) || 0.0));
+      let angular = Math.min(1.0, Math.max(0.0, parseFloat(angularInput.value) || 0.0));
 
       const twist = new ROSLIB.Message({
-        linear: {
-          x: cur_y_left * activeSpeed,
-          y: cur_x_left * activeSpeed,
-          z: 0.0
-        },
-        angular: {
-          x: 0.0,
-          y: 0.0,
-          z: cur_x_right * activeSpeed
-        }
+        linear: { x: cur_y_left * linear, y: cur_x_left * linear, z: 0.0 },
+        angular: { x: 0.0, y: 0.0, z: cur_x_right * angular }
       });
 
       twistTopic.publish(twist);
@@ -230,8 +216,7 @@
 
     const half_width = window.innerWidth / 2;
     let current_right = -1, current_left = -1;
-    let cur_x_left = 0.0, cur_y_left = 0.0;
-    let cur_x_right = 0.0;
+    let cur_x_left = 0.0, cur_y_left = 0.0, cur_x_right = 0.0;
 
     nipplejs.create({
       zone: document.getElementById('joy_zone'),
