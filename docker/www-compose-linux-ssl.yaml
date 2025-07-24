@@ -7,7 +7,7 @@
 version: "3.0"
 services:
   webserver:
-    image: apache_rosbridge:one
+    image: apache_rosbridge:noetic
     # ipc: host
     security_opt:
       - seccomp:unconfined
@@ -21,8 +21,9 @@ services:
       - "${PWD}/userdir:/runshell"
       - "${PWD}/sites-available:/etc/apache2/sites-available"
       - "${PWD}/../html:/var/www/html"
+    network_mode: ${NETWORK_MODE:-host}
   rosbridge:
-    image: apache_rosbridge:one
+    image: apache_rosbridge:noetic
     security_opt:
       - seccomp:unconfined
     ports:
@@ -35,4 +36,4 @@ services:
       - "${PWD}/userdir/server.crt:/irsl_security/server.crt"
       - "${PWD}/userdir:/runshell"
       - "${PWD}/../script:/userdir"
-##    network_mode: ${NETWORK_MODE:-host}
+    network_mode: ${NETWORK_MODE:-host}
