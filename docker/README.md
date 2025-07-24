@@ -9,12 +9,12 @@
 
 SSL の場合
 ``` bash
-docker compose -f docker-compose-linux-ssl.yaml up
+docker compose -f www-compose-linux-ssl.yaml up
 ```
 
 通常の場合
 ``` bash
-docker compose -f docker-compose-linux.yaml up
+docker compose -f www-compose-linux.yaml up
 ```
 
 ### compose.yaml の パラメータ(環境変数として設定)
@@ -23,6 +23,8 @@ docker compose -f docker-compose-linux.yaml up
 - BRIDGE_HOSTNAME (default: 0.0.0.0)
 - BRIDGE_PORT (default: 9990)
 - NETWORK_MODE (default: host)
+- ROS_MASTER_URI [pass to rosbrdige]
+- ROS_HOSTNAME [pass to rosbrdige]
 
 ## webサイトへの接続
 
@@ -38,7 +40,23 @@ SSL の場合
 https://$$HOSTNAME$$/rostest/rostest.html?wsport=9990&wsaddr=$$HOSTNAME$$&ssl=1
 ```
 
-```/webtest``` がsubscribeされる
+```/webtest``` で std_msgs/String が subscribe される(subscribeした文字列がサイトに表示される)
+
+```$$HOSTNAME$$``` には同じホスト名(グローバルアドレス)を指定する
+
+### rostest2
+
+通常の場合
+```
+http://$$HOSTNAME$$/rostest/rostest_pub.html?wsport=9909&wsaddr=$$HOSTNAME$$
+```
+
+SSL の場合
+```
+https://$$HOSTNAME$$/rostest/rostest_pub.html?wsport=9990&wsaddr=$$HOSTNAME$$&ssl=1
+```
+
+```/pubtest``` に std_msgs/String が publish される
 
 ### audio
 
