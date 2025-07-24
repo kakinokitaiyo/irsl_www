@@ -4,6 +4,8 @@
 # BRIDGE_HOSTNAME (default: 0.0.0.0)
 # BRIDGE_PORT (default: 9909)
 # NETWORK_MODE (default: host)
+# ROS_MASTER_URI ## pass to rosbridge
+# ROS_HOSTNAME ## pass to rosbridge
 version: "3.0"
 services:
   webserver:
@@ -29,7 +31,9 @@ services:
       - "9909:9909"
     depends_on:
       - webserver
-    command: [ "/runshell/run_rosbridge.sh", "${BRIDGE_MASTER:-http://localhost:11311}", "${BRIDGE_HOSTNAME:-0.0.0.0}", "${BRIDGE_PORT:-9909}" ]
+    command: [ "/runshell/run_rosbridge.sh",     "${BRIDGE_MASTER:-$ROS_MASTER_URI}", "${BRIDGE_HOSTNAME:-0.0.0.0}", "${BRIDGE_PORT:-9909}" ]
+    environment:
+      - ROS_HOSTNAME=${ROS_HOSTNAME:-localhost}
     volumes:
       - "${PWD}/userdir:/runshell"
       - "${PWD}/../script:/userdir"

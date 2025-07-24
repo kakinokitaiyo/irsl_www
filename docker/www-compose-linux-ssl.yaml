@@ -4,6 +4,8 @@
 # BRIDGE_HOSTNAME (default: 0.0.0.0)
 # BRIDGE_PORT (default: 9990)
 # NETWORK_MODE (default: host)
+# ROS_MASTER_URI ## pass to rosbridge
+# ROS_HOSTNAME ## pass to rosbridge
 version: "3.0"
 services:
   webserver:
@@ -18,10 +20,9 @@ services:
     volumes:
       - "${PWD}/userdir/server.key:/irsl_security/server.key"
       - "${PWD}/userdir/server.crt:/irsl_security/server.crt"
-      - "${PWD}/userdir:/runshell"
       - "${PWD}/sites-available:/etc/apache2/sites-available"
+      - "${PWD}/userdir:/runshell"
       - "${PWD}/../html:/var/www/html"
-    network_mode: ${NETWORK_MODE:-host}
   rosbridge:
     image: apache_rosbridge:noetic
     security_opt:
@@ -30,7 +31,9 @@ services:
       - "9990:9990"
     depends_on:
       - webserver
-    command: [ "/runshell/run_rosbridge_ssl.sh", "${BRIDGE_MASTER:-http://localhost:11311}", "${BRIDGE_HOSTNAME:-0.0.0.0}", "${BRIDGE_PORT:-9990}" ]
+    command: [ "/runshell/run_rosbridge_ssl.sh", "${BRIDGE_MASTER:-$ROS_MASTER_URI}", "${BRIDGE_HOSTNAME:-0.0.0.0}", "${BRIDGE_PORT:-9990}" ]
+    environment:
+      - ROS_HOSTNAME=${ROS_HOSTNAME:-localhost}
     volumes:
       - "${PWD}/userdir/server.key:/irsl_security/server.key"
       - "${PWD}/userdir/server.crt:/irsl_security/server.crt"
