@@ -23,8 +23,8 @@ docker compose -f www-compose-linux.yaml up
 - BRIDGE_HOSTNAME (default: 0.0.0.0)
 - BRIDGE_PORT (default: 9990)
 - NETWORK_MODE (default: host)
-- ROS_MASTER_URI [pass to rosbrdige]
-- ROS_HOSTNAME [pass to rosbrdige]
+- ROS_MASTER_URI [pass to rosbridge]
+- ROS_HOSTNAME [pass to rosbridge]
 
 ## webサイトへの接続
 

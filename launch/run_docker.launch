@@ -1,0 +1,5 @@
+<launch>
+  <node pkg="irsl_www"
+        type="run_docker.sh"
+        name="irsl_www" output="screen" />
+</launch>

@@ -6,10 +6,13 @@
 # NETWORK_MODE (default: host)
 # ROS_MASTER_URI ## pass to rosbridge
 # ROS_HOSTNAME ## pass to rosbridge
+# REPO (default: repo.irsl.eiiris.tut.ac.jp/)
+# SUFFIX (default: noetic)
+# ROOT_DIR (default: $PWD)
 version: "3.0"
 services:
   webserver:
-    image: apache_rosbridge:noetic
+    image: ${REPO:-repo.irsl.eiiris.tut.ac.jp/}apache_rosbridge:${SUFFIX:-noetic}
     # ipc: host
     security_opt:
       - seccomp:unconfined
@@ -18,13 +21,13 @@ services:
       - "443:443"
     command: [ "/runshell/run_apache.sh", "${WEB_HOSTNAME:-0.0.0.0}" ]
     volumes:
-      - "${PWD}/userdir/server.key:/irsl_security/server.key"
-      - "${PWD}/userdir/server.crt:/irsl_security/server.crt"
-      - "${PWD}/sites-available:/etc/apache2/sites-available"
-      - "${PWD}/userdir:/runshell"
-      - "${PWD}/../html:/var/www/html"
+      - "${ROOT_DIR:-$PWD}/userdir/server.key:/irsl_security/server.key"
+      - "${ROOT_DIR:-$PWD}/userdir/server.crt:/irsl_security/server.crt"
+      - "${ROOT_DIR:-$PWD}/sites-available:/etc/apache2/sites-available"
+      - "${ROOT_DIR:-$PWD}/userdir:/runshell"
+      - "${ROOT_DIR:-$PWD}/../html:/var/www/html"
   rosbridge:
-    image: apache_rosbridge:noetic
+    image: ${REPO:-repo.irsl.eiiris.tut.ac.jp/}apache_rosbridge:${SUFFIX:-noetic}
     security_opt:
       - seccomp:unconfined
     ports:
@@ -35,6 +38,6 @@ services:
     environment:
       - ROS_HOSTNAME=${ROS_HOSTNAME:-localhost}
     volumes:
-      - "${PWD}/userdir:/runshell"
-      - "${PWD}/../script:/userdir"
+      - "${ROOT_DIR:-$PWD}/userdir:/runshell"
+      - "${ROOT_DIR:-$PWD}/../script:/userdir"
     network_mode: ${NETWORK_MODE:-host}
