@@ -101,28 +101,19 @@ function handleMove(evt) {
 
     if (idx >= 0) {
       log(`continuing touch ${idx}`);
-      
+      ctx.beginPath();
+      log(
+        `ctx.moveTo( ${ongoingTouches[idx].pageX}, ${ongoingTouches[idx].pageY} );`,
+      );
+      ctx.moveTo(ongoingTouches[idx].pageX, ongoingTouches[idx].pageY);
+      log(`ctx.lineTo( ${touches[i].pageX}, ${touches[i].pageY} );`);
+      ctx.lineTo(touches[i].pageX, touches[i].pageY);
+      ctx.lineWidth = brushSize;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
       if (isEraser) {
-        // 消しゴムの場合
         ctx.clearRect(touches[i].pageX - brushSize / 2, touches[i].pageY - brushSize / 2, brushSize, brushSize);
-        // プレビュー表示（透明な円で消しゴム範囲を表示）
-        ctx.strokeStyle = "rgba(200, 200, 200, 0.5)";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(touches[i].pageX, touches[i].pageY, brushSize / 2, 0, 2 * Math.PI);
-        ctx.stroke();
       } else {
-        // ペンの場合
-        ctx.beginPath();
-        log(
-          `ctx.moveTo( ${ongoingTouches[idx].pageX}, ${ongoingTouches[idx].pageY} );`,
-        );
-        ctx.moveTo(ongoingTouches[idx].pageX, ongoingTouches[idx].pageY);
-        log(`ctx.lineTo( ${touches[i].pageX}, ${touches[i].pageY} );`);
-        ctx.lineTo(touches[i].pageX, touches[i].pageY);
-        ctx.lineWidth = brushSize;
-        ctx.lineCap = "round";
-        ctx.lineJoin = "round";
         ctx.strokeStyle = color;
         ctx.stroke();
       }
@@ -146,18 +137,12 @@ function handleEnd(evt) {
     let idx = ongoingTouchIndexById(touches[i].identifier);
 
     if (idx >= 0) {
-      if (isEraser) {
-        // 消しゴムの場合は clearRect を使用
-        ctx.clearRect(touches[i].pageX - brushSize / 2, touches[i].pageY - brushSize / 2, brushSize, brushSize);
-      } else {
-        // ペンの場合
-        ctx.lineWidth = brushSize;
-        ctx.fillStyle = color;
-        ctx.beginPath();
-        ctx.moveTo(ongoingTouches[idx].pageX, ongoingTouches[idx].pageY);
-        ctx.lineTo(touches[i].pageX, touches[i].pageY);
-        ctx.fillRect(touches[i].pageX - brushSize / 2, touches[i].pageY - brushSize / 2, brushSize, brushSize);
-      }
+      ctx.lineWidth = brushSize;
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(ongoingTouches[idx].pageX, ongoingTouches[idx].pageY);
+      ctx.lineTo(touches[i].pageX, touches[i].pageY);
+      ctx.fillRect(touches[i].pageX - brushSize / 2, touches[i].pageY - brushSize / 2, brushSize, brushSize);
       ongoingTouches.splice(idx, 1); // remove it; we're done
     } else {
       log("can't figure out which touch to end");
