@@ -4,17 +4,40 @@
   overflow: scroll;
 }
 
-#buttonSend {
+#buttonSend, #buttonClear, #buttonEraser, #buttonUndo, #buttonRedo {
     display:inline-block;
     position:relative;
-    top:20px;
-    margin-left:20px;
-    margin-right:auto;
-    bottom:32px;
+    margin: 5px;
+    padding: 10px 15px;
     background-color: rgba(0, 200, 0, 1.0);
     border: 1px solid rgba(255, 255, 255, 0.7);
     box-shadow: 0px 0px 1px 2px rgba(0, 0, 0, 0.2);
-    font-size: 32px;
+    font-size: 16px;
     font-family: "Lucida Grande", "Arial", sans-serif;
     color: rgba(255, 255, 255, 1.0);
+    cursor: pointer;
 }
+
+#buttonClear {
+    background-color: rgba(200, 0, 0, 1.0);
+}
+
+#buttonEraser {
+    background-color: rgba(200, 100, 0, 1.0);
+}
+
+#buttonUndo {
+    background-color: rgba(100, 100, 200, 1.0);
+}
+
+#buttonRedo {
+    background-color: rgba(100, 150, 200, 1.0);
+}
+
+#buttonEraser.active {
+    background-color: rgba(255, 0, 0, 1.0);
+}
+
+input[type="range"] {
+    vertical-align: middle;
+    margin: 0 10px;

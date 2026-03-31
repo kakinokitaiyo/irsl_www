@@ -1,12 +1,66 @@
 //// <!-- https://developer.mozilla.org/ja/docs/Web/API/Touch_events -->
 
 ////
+let brushSize = 4;
+let isEraser = false;
+let drawingHistory = [];
+let historyIndex = 0;
+
 function startup() {
   const el = document.getElementById("canvas");
   el.addEventListener("touchstart",  handleStart);
   el.addEventListener("touchend",    handleEnd);
   el.addEventListener("touchcancel", handleCancel);
   el.addEventListener("touchmove",   handleMove);
+  
+  // 初期状態（空のキャンバス）を履歴に保存
+  drawingHistory.push(el.toDataURL());
+  
+  // ペンの太さスライダー
+  const brushSizeInput = document.getElementById("brushSize");
+  const brushSizeDisplay = document.getElementById("brushSizeDisplay");
+  brushSizeInput.addEventListener("input", (e) => {
+    brushSize = parseInt(e.target.value);
+    brushSizeDisplay.textContent = brushSize;
+  });
+  
+  // 消しゴムボタン
+  const buttonEraser = document.getElementById("buttonEraser");
+  buttonEraser.addEventListener("click", () => {
+    isEraser = !isEraser;
+    buttonEraser.classList.toggle("active");
+  });
+  
+  // 戻るボタン
+  const buttonUndo = document.getElementById("buttonUndo");
+  buttonUndo.addEventListener("click", () => {
+    if (historyIndex > 0) {
+      historyIndex--;
+      redrawCanvasAtIndex(historyIndex);
+    }
+  });
+  
+  // 進むボタン
+  const buttonRedo = document.getElementById("buttonRedo");
+  buttonRedo.addEventListener("click", () => {
+    if (historyIndex < drawingHistory.length - 1) {
+      historyIndex++;
+      redrawCanvasAtIndex(historyIndex);
+    }
+  });
+  
+  // クリアボタン
+  const buttonClear = document.getElementById("buttonClear");
+  buttonClear.addEventListener("click", () => {
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // 履歴をリセット（クリア前の履歴は全て削除）
+    drawingHistory = [canvas.toDataURL()];
+    historyIndex = 0;
+  });
+  
   log("Initialized.");
 }
 
@@ -25,9 +79,13 @@ function handleStart(evt) {
     const color = colorForTouch(touches[i]);
     log(`color of touch with id ${touches[i].identifier} = ${color}`);
     ctx.beginPath();
-    ctx.arc(touches[i].pageX, touches[i].pageY, 4, 0, 2 * Math.PI, false); // 最初に円を描く
-    ctx.fillStyle = color;
-    ctx.fill();
+    ctx.arc(touches[i].pageX, touches[i].pageY, brushSize / 2, 0, 2 * Math.PI, false);
+    if (isEraser) {
+      ctx.clearRect(touches[i].pageX - brushSize / 2, touches[i].pageY - brushSize / 2, brushSize, brushSize);
+    } else {
+      ctx.fillStyle = color;
+      ctx.fill();
+    }
   }
 }
 
@@ -43,16 +101,31 @@ function handleMove(evt) {
 
     if (idx >= 0) {
       log(`continuing touch ${idx}`);
-      ctx.beginPath();
-      log(
-        `ctx.moveTo( ${ongoingTouches[idx].pageX}, ${ongoingTouches[idx].pageY} );`,
-      );
-      ctx.moveTo(ongoingTouches[idx].pageX, ongoingTouches[idx].pageY);
-      log(`ctx.lineTo( ${touches[i].pageX}, ${touches[i].pageY} );`);
-      ctx.lineTo(touches[i].pageX, touches[i].pageY);
-      ctx.lineWidth = 4;
-      ctx.strokeStyle = color;
-      ctx.stroke();
+      
+      if (isEraser) {
+        // 消しゴムの場合
+        ctx.clearRect(touches[i].pageX - brushSize / 2, touches[i].pageY - brushSize / 2, brushSize, brushSize);
+        // プレビュー表示（透明な円で消しゴム範囲を表示）
+        ctx.strokeStyle = "rgba(200, 200, 200, 0.5)";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(touches[i].pageX, touches[i].pageY, brushSize / 2, 0, 2 * Math.PI);
+        ctx.stroke();
+      } else {
+        // ペンの場合
+        ctx.beginPath();
+        log(
+          `ctx.moveTo( ${ongoingTouches[idx].pageX}, ${ongoingTouches[idx].pageY} );`,
+        );
+        ctx.moveTo(ongoingTouches[idx].pageX, ongoingTouches[idx].pageY);
+        log(`ctx.lineTo( ${touches[i].pageX}, ${touches[i].pageY} );`);
+        ctx.lineTo(touches[i].pageX, touches[i].pageY);
+        ctx.lineWidth = brushSize;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.strokeStyle = color;
+        ctx.stroke();
+      }
 
       ongoingTouches.splice(idx, 1, copyTouch(touches[i])); // swap in the new touch record
     } else {
@@ -73,17 +146,32 @@ function handleEnd(evt) {
     let idx = ongoingTouchIndexById(touches[i].identifier);
 
     if (idx >= 0) {
-      ctx.lineWidth = 4;
-      ctx.fillStyle = color;
-      ctx.beginPath();
-      ctx.moveTo(ongoingTouches[idx].pageX, ongoingTouches[idx].pageY);
-      ctx.lineTo(touches[i].pageX, touches[i].pageY);
-      ctx.fillRect(touches[i].pageX - 4, touches[i].pageY - 4, 8, 8); // and a square at the end
+      if (isEraser) {
+        // 消しゴムの場合は clearRect を使用
+        ctx.clearRect(touches[i].pageX - brushSize / 2, touches[i].pageY - brushSize / 2, brushSize, brushSize);
+      } else {
+        // ペンの場合
+        ctx.lineWidth = brushSize;
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.moveTo(ongoingTouches[idx].pageX, ongoingTouches[idx].pageY);
+        ctx.lineTo(touches[i].pageX, touches[i].pageY);
+        ctx.fillRect(touches[i].pageX - brushSize / 2, touches[i].pageY - brushSize / 2, brushSize, brushSize);
+      }
       ongoingTouches.splice(idx, 1); // remove it; we're done
     } else {
       log("can't figure out which touch to end");
     }
   }
+  
+  // 描画状態を履歴に保存
+  const el2 = document.getElementById("canvas");
+  if (historyIndex < drawingHistory.length - 1) {
+    // 戻った後に新しく描画した場合は、未来の履歴を削除
+    drawingHistory = drawingHistory.slice(0, historyIndex + 1);
+  }
+  historyIndex = drawingHistory.length;
+  drawingHistory.push(el2.toDataURL());
 }
 
 function handleCancel(evt) {
@@ -94,6 +182,34 @@ function handleCancel(evt) {
   for (let i = 0; i < touches.length; i++) {
     let idx = ongoingTouchIndexById(touches[i].identifier);
     ongoingTouches.splice(idx, 1); // remove it; we're done
+  }
+}
+
+function redrawCanvasAtIndex(index) {
+  const el = document.getElementById("canvas");
+  const ctx = el.getContext("2d");
+  ctx.clearRect(0, 0, el.width, el.height);
+  
+  if (index >= 0 && index < drawingHistory.length) {
+    const img = new Image();
+    img.src = drawingHistory[index];
+    img.onload = () => {
+      ctx.drawImage(img, 0, 0);
+    };
+  }
+}
+
+function redrawCanvas() {
+  const el = document.getElementById("canvas");
+  const ctx = el.getContext("2d");
+  ctx.clearRect(0, 0, el.width, el.height);
+  
+  if (drawingHistory.length > 0) {
+    const img = new Image();
+    img.src = drawingHistory[drawingHistory.length - 1];
+    img.onload = () => {
+      ctx.drawImage(img, 0, 0);
+    };
   }
 }
 
