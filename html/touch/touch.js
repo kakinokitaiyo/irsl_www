@@ -2,6 +2,7 @@
 
 ////
 let brushSize = 4;
+let penColor = "#000000";
 let isEraser = false;
 let drawingHistory = [];
 let historyIndex = 0;
@@ -22,6 +23,12 @@ function startup() {
   brushSizeInput.addEventListener("input", (e) => {
     brushSize = parseInt(e.target.value);
     brushSizeDisplay.textContent = brushSize;
+  });
+
+  // 色の選択
+  const penColorInput = document.getElementById("penColor");
+  penColorInput.addEventListener("input", (e) => {
+    penColor = e.target.value;
   });
   
   // 消しゴムボタン
@@ -76,14 +83,13 @@ function handleStart(evt) {
   for (let i = 0; i < touches.length; i++) {
     log(`touchstart: ${i}.`);
     ongoingTouches.push(copyTouch(touches[i]));
-    const color = colorForTouch(touches[i]);
-    log(`color of touch with id ${touches[i].identifier} = ${color}`);
+    log(`color = ${penColor}`);
     ctx.beginPath();
     ctx.arc(touches[i].pageX, touches[i].pageY, brushSize / 2, 0, 2 * Math.PI, false);
     if (isEraser) {
       ctx.clearRect(touches[i].pageX - brushSize / 2, touches[i].pageY - brushSize / 2, brushSize, brushSize);
     } else {
-      ctx.fillStyle = color;
+      ctx.fillStyle = penColor;
       ctx.fill();
     }
   }
@@ -96,7 +102,6 @@ function handleMove(evt) {
   const touches = evt.changedTouches;
 
   for (let i = 0; i < touches.length; i++) {
-    const color = colorForTouch(touches[i]);
     const idx = ongoingTouchIndexById(touches[i].identifier);
 
     if (idx >= 0) {
@@ -114,7 +119,7 @@ function handleMove(evt) {
       if (isEraser) {
         ctx.clearRect(touches[i].pageX - brushSize / 2, touches[i].pageY - brushSize / 2, brushSize, brushSize);
       } else {
-        ctx.strokeStyle = color;
+        ctx.strokeStyle = penColor;
         ctx.stroke();
       }
 
@@ -133,16 +138,19 @@ function handleEnd(evt) {
   const touches = evt.changedTouches;
 
   for (let i = 0; i < touches.length; i++) {
-    const color = colorForTouch(touches[i]);
     let idx = ongoingTouchIndexById(touches[i].identifier);
 
     if (idx >= 0) {
-      ctx.lineWidth = brushSize;
-      ctx.fillStyle = color;
-      ctx.beginPath();
-      ctx.moveTo(ongoingTouches[idx].pageX, ongoingTouches[idx].pageY);
-      ctx.lineTo(touches[i].pageX, touches[i].pageY);
-      ctx.fillRect(touches[i].pageX - brushSize / 2, touches[i].pageY - brushSize / 2, brushSize, brushSize);
+      if (isEraser) {
+        ctx.clearRect(touches[i].pageX - brushSize / 2, touches[i].pageY - brushSize / 2, brushSize, brushSize);
+      } else {
+        ctx.lineWidth = brushSize;
+        ctx.fillStyle = penColor;
+        ctx.beginPath();
+        ctx.moveTo(ongoingTouches[idx].pageX, ongoingTouches[idx].pageY);
+        ctx.lineTo(touches[i].pageX, touches[i].pageY);
+        ctx.fillRect(touches[i].pageX - brushSize / 2, touches[i].pageY - brushSize / 2, brushSize, brushSize);
+      }
       ongoingTouches.splice(idx, 1); // remove it; we're done
     } else {
       log("can't figure out which touch to end");
@@ -196,17 +204,6 @@ function redrawCanvas() {
       ctx.drawImage(img, 0, 0);
     };
   }
-}
-
-function colorForTouch(touch) {
-  let r = touch.identifier % 16;
-  let g = Math.floor(touch.identifier / 3) % 16;
-  let b = Math.floor(touch.identifier / 7) % 16;
-  r = r.toString(16); // make it a hex digit
-  g = g.toString(16); // make it a hex digit
-  b = b.toString(16); // make it a hex digit
-  const color = `#${r}${g}${b}`;
-  return color;
 }
 
 function copyTouch({ identifier, pageX, pageY }) {
