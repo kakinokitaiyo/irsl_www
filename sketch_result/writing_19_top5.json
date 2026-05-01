@@ -1,0 +1,51 @@
+{
+  "sketch_file": "writing_19.png",
+  "device": "cuda",
+  "topk": [
+    {
+      "rank": 1,
+      "gallery_id": 50,
+      "gallery_file": "peach_edge.png",
+      "photo_id": 8,
+      "photo_file": "peach.jpeg",
+      "photo_source_path": "/home/irsl/workspace/CLIP_DB/photos/peach.jpeg",
+      "score": 0.6735097169876099
+    },
+    {
+      "rank": 2,
+      "gallery_id": 43,
+      "gallery_file": "apple_edge.png",
+      "photo_id": 1,
+      "photo_file": "apple.jpeg",
+      "photo_source_path": "/home/irsl/workspace/CLIP_DB/photos/apple.jpeg",
+      "score": 0.6555334329605103
+    },
+    {
+      "rank": 3,
+      "gallery_id": 54,
+      "gallery_file": "syamozi_edge.png",
+      "photo_id": 12,
+      "photo_file": "syamozi.jpeg",
+      "photo_source_path": "/home/irsl/workspace/CLIP_DB/photos/syamozi.jpeg",
+      "score": 0.5488329529762268
+    },
+    {
+      "rank": 4,
+      "gallery_id": 46,
+      "gallery_file": "cup01_edge.png",
+      "photo_id": 4,
+      "photo_file": "cup01.jpeg",
+      "photo_source_path": "/home/irsl/workspace/CLIP_DB/photos/cup01.jpeg",
+      "score": 0.5405116677284241
+    },
+    {
+      "rank": 5,
+      "gallery_id": 48,
+      "gallery_file": "cup03_edge.png",
+      "photo_id": 6,
+      "photo_file": "cup03.jpeg",
+      "photo_source_path": "/home/irsl/workspace/CLIP_DB/photos/cup03.jpeg",
+      "score": 0.5288611054420471
+    }
+  ]
+}

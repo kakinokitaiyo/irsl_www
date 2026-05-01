@@ -12,6 +12,30 @@ from base64 import b64decode
 result_pub = None
 
 
+def parse_json_from_mixed_output(output: str) -> dict:
+    text = (output or "").strip()
+    if not text:
+        raise ValueError("SBIR output is empty")
+
+    # まず全体を JSON として解釈
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+
+    # ログ混在時は下から順に JSON 行を探索
+    for line in reversed(text.splitlines()):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            return json.loads(line)
+        except json.JSONDecodeError:
+            continue
+
+    raise ValueError(f"No valid JSON found in SBIR output: {text[:300]}")
+
+
 def run_sbir_once(sketch_path: str) -> str:
     clip_db_root = os.getenv("CLIP_DB_ROOT", "/home/irsl/workspace/CLIP_DB")
     sbir_script = os.path.join(clip_db_root, "src", "run_sbir_once_from_db.py")
@@ -41,7 +65,7 @@ def run_sbir_once(sketch_path: str) -> str:
         "--table",
         os.getenv("SBIR_TABLE", "sketch_images"),
         "--gallery_source_type",
-        os.getenv("SBIR_GALLERY_SOURCE_TYPE", "output"),
+        os.getenv("SBIR_GALLERY_SOURCE_TYPE", "photo"),
         "--display_source_type",
         os.getenv("SBIR_DISPLAY_SOURCE_TYPE", "photo"),
         "--device",
@@ -52,8 +76,16 @@ def run_sbir_once(sketch_path: str) -> str:
         os.getenv("SBIR_MODEL_PATH", "/home/irsl/workspace/SketchScape/models/fscoco_normal.pth"),
     ]
 
-    completed = subprocess.run(cmd, check=True, capture_output=True, text=True)
-    return completed.stdout.strip()
+    try:
+        completed = subprocess.run(cmd, check=True, capture_output=True, text=True)
+        return completed.stdout.strip()
+    except subprocess.CalledProcessError as e:
+        stderr = (e.stderr or "").strip()
+        stdout = (e.stdout or "").strip()
+        raise RuntimeError(
+            f"SBIR command failed (exit={e.returncode}) "
+            f"stderr={stderr or '<empty>'} stdout={stdout or '<empty>'}"
+        ) from e
 
 def callback(msg):
     data = msg.data
@@ -80,6 +112,7 @@ def callback(msg):
 
     try:
         result_json = run_sbir_once(output_path)
+        parsed = parse_json_from_mixed_output(result_json)
 
         result_dir = os.path.join(os.path.dirname(__file__), '..', 'sketch_result')
         os.makedirs(result_dir, exist_ok=True)
@@ -88,11 +121,10 @@ def callback(msg):
             os.path.splitext(os.path.basename(output_path))[0] + '_top5.json'
         )
         with open(result_path, 'w', encoding='utf-8') as f:
-            parsed = json.loads(result_json)
             json.dump(parsed, f, ensure_ascii=False, indent=2)
 
         if result_pub is not None:
-            result_pub.publish(String(data=result_json))
+            result_pub.publish(String(data=json.dumps(parsed, ensure_ascii=False)))
 
         rospy.loginfo("SBIR result saved to: %s", result_path)
     except Exception as e:
