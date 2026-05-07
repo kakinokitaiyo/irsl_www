@@ -41,6 +41,7 @@
 input[type="range"] {
     vertical-align: middle;
     margin: 0 10px;
+}
 
 
 input[type="color"] {
@@ -51,4 +52,59 @@ input[type="color"] {
     padding: 0;
     border: none;
     background: transparent;
+}
+
+#sbir-panel {
+    width: 900px;
+}
+
+#sbir-results {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 12px;
+    margin-top: 10px;
+}
+
+.sbir-card {
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    padding: 8px;
+    background: #fafafa;
+}
+
+.sbir-rank {
+    font-weight: bold;
+    margin-bottom: 6px;
+}
+
+.sbir-photo-img {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    object-fit: contain;
+    background: #fff;
+    border: 1px solid #ddd;
+}
+
+.sbir-query-img {
+    width: 140px;
+    height: 140px;
+    object-fit: contain;
+    border: 1px solid #ddd;
+    background: #fff;
+}
+
+.sbir-photo-missing {
+    width: 100%;
+    height: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px dashed #aaa;
+    color: #666;
+}
+
+.sbir-meta {
+    font-size: 12px;
+    margin-top: 4px;
+    word-break: break-all;
 }

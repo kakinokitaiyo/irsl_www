@@ -2,6 +2,7 @@
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import rospy
@@ -10,6 +11,42 @@ from base64 import b64decode
 
 
 result_pub = None
+
+
+def enrich_result_for_web(parsed: dict, sketch_path: str) -> dict:
+    """Add web-accessible image paths into SBIR result payload."""
+    web_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'html', 'touch'))
+    photo_web_dir = os.path.join(web_root, 'sbir_photos')
+    sketch_web_dir = os.path.join(web_root, 'sbir_sketches')
+    os.makedirs(photo_web_dir, exist_ok=True)
+    os.makedirs(sketch_web_dir, exist_ok=True)
+
+    # Copy sketch for display on web page
+    sketch_base = os.path.basename(sketch_path)
+    sketch_dst = os.path.join(sketch_web_dir, sketch_base)
+    try:
+        shutil.copy2(sketch_path, sketch_dst)
+        parsed["sketch_web_path"] = f"/touch/sbir_sketches/{sketch_base}"
+    except Exception as e:
+        rospy.logwarn("Failed to copy sketch for web display: %s", str(e))
+
+    # Copy top-k photos for display on web page
+    topk = parsed.get("topk", [])
+    for item in topk:
+        src = item.get("photo_source_path")
+        rank = item.get("rank", 0)
+        if not src or not os.path.isfile(src):
+            continue
+        base = os.path.basename(src)
+        dst_name = f"r{rank}_{base}"
+        dst_path = os.path.join(photo_web_dir, dst_name)
+        try:
+            shutil.copy2(src, dst_path)
+            item["photo_web_path"] = f"/touch/sbir_photos/{dst_name}"
+        except Exception as e:
+            rospy.logwarn("Failed to copy photo for web display (%s): %s", src, str(e))
+
+    return parsed
 
 
 def parse_json_from_mixed_output(output: str) -> dict:
@@ -51,21 +88,23 @@ def run_sbir_once(sketch_path: str) -> str:
         "--topk",
         os.getenv("SBIR_TOPK", "5"),
         "--host",
-        os.getenv("PGHOST", "localhost"),
+        os.getenv("PGHOST", "133.15.97.94"),
         "--port",
         os.getenv("PGPORT", "5432"),
         "--dbname",
         os.getenv("PGDATABASE", "kakinoki_db"),
         "--user",
-        os.getenv("PGUSER", ""),
+        os.getenv("PGUSER", "kakinoki_taiyo"),
         "--password",
-        os.getenv("PGPASSWORD", ""),
+        os.getenv("PGPASSWORD", "irsl"),
         "--schema",
         os.getenv("SBIR_SCHEMA", "home_robot"),
-        "--table",
-        os.getenv("SBIR_TABLE", "sketch_images"),
+        "--gallery_table",
+        os.getenv("SBIR_GALLERY_TABLE", "photos_edge"),
+        "--display_table",
+        os.getenv("SBIR_DISPLAY_TABLE", "photos"),
         "--gallery_source_type",
-        os.getenv("SBIR_GALLERY_SOURCE_TYPE", "photo"),
+        os.getenv("SBIR_GALLERY_SOURCE_TYPE", "photo_edge"),
         "--display_source_type",
         os.getenv("SBIR_DISPLAY_SOURCE_TYPE", "photo"),
         "--device",
@@ -113,6 +152,7 @@ def callback(msg):
     try:
         result_json = run_sbir_once(output_path)
         parsed = parse_json_from_mixed_output(result_json)
+        parsed = enrich_result_for_web(parsed, output_path)
 
         result_dir = os.path.join(os.path.dirname(__file__), '..', 'sketch_result')
         os.makedirs(result_dir, exist_ok=True)

@@ -33,6 +33,13 @@
     <button type="button" id="buttonClear">Clear</button>
   </div>
   <br />
+  <div id="sbir-panel">
+    <h3>SBIR Top5</h3>
+    <div id="sbir-status">まだ結果はありません</div>
+    <div id="sbir-query"></div>
+    <div id="sbir-results"></div>
+  </div>
+  <br />
   <!-- No Log
   Log:
   <pre id="log" style="border: 1px solid #ccc;"></pre>
@@ -45,7 +52,63 @@
               name : '/writing',
               messageType : 'std_msgs/String'
           });
+
+          var resultTopic = new ROSLIB.Topic({
+            ros : ros,
+            name : '/sbir_top5',
+            messageType : 'std_msgs/String'
+          });
+
+          resultTopic.subscribe(function(message) {
+            try {
+              const payload = JSON.parse(message.data);
+              renderSbirResult(payload);
+            } catch (e) {
+              console.log('failed to parse /sbir_top5:', e);
+            }
+          });
       }
+
+        function renderSbirResult(payload) {
+          const statusEl = document.getElementById('sbir-status');
+          const queryEl = document.getElementById('sbir-query');
+          const resultsEl = document.getElementById('sbir-results');
+
+          if (!statusEl || !queryEl || !resultsEl) return;
+
+          const sketchName = payload.sketch_file || '(unknown sketch)';
+          statusEl.textContent = `結果を受信しました: ${sketchName}`;
+
+          const sketchWeb = payload.sketch_web_path;
+          queryEl.innerHTML = sketchWeb
+          ? `<div class="query-wrap"><b>query:</b><br><img class="sbir-query-img" src="${sketchWeb}" alt="query sketch"></div>`
+          : '';
+
+          const topk = Array.isArray(payload.topk) ? payload.topk : [];
+          if (topk.length === 0) {
+            resultsEl.innerHTML = '<p>結果がありません。</p>';
+            return;
+          }
+
+          resultsEl.innerHTML = topk.map(item => {
+            const rank = item.rank ?? '-';
+            const score = typeof item.score === 'number' ? item.score.toFixed(4) : item.score;
+            const name = item.photo_file || item.gallery_file || '(no-name)';
+            const img = item.photo_web_path || '';
+            const imgHtml = img
+            ? `<img class="sbir-photo-img" src="${img}" alt="rank ${rank}: ${name}">`
+            : '<div class="sbir-photo-missing">画像なし</div>';
+            return `
+            <div class="sbir-card">
+              <div class="sbir-rank">#${rank}</div>
+              ${imgHtml}
+              <div class="sbir-meta">${name}</div>
+              <div class="sbir-meta">score: ${score}</div>
+            </div>
+            `;
+          }).join('');
+        }
+
       function callbackAudioBlob(blob) {
           //console.log('callback');
           //console.log(blob);
