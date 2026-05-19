@@ -1,3 +1,37 @@
+Error Fix — 短いチェンジログ
+
+日付: 2026-05-18
+
+問題: Gemini API 呼び出しで "Budget 0 is invalid" エラーが発生しました（Gemini 2.5 Pro）。
+
+原因: `GenerateContentConfig` に `thinking_config=types.ThinkingConfig(thinking_budget=0)` が含まれており、`thinking_budget=0` は無効でした。
+
+対応:
+
+- `gemini_api.py` の `GenerateContentConfig` から `thinking_config` を削除し、`temperature=0.2` のみを使用するよう修正しました。
+
+検証: 修正後、VLM 呼び出しは成功し、期待される JSON 応答が得られることを確認しました。
+
+生ログ（詳細・スニペット）はアーカイブに保存しています:
+
+  `script/logs/error_fix_2026-05-18.log`
+
+再現手順（短縮）:
+
+```bash
+python3 -m py_compile gemini_api.py
+python3 sub_writing1.py
+# スケッチを描いて Send をクリック
+```
+
+参照:
+
+- プロンプト・仕様: `PROMPT_IMPROVEMENT.md`
+- フルレポート: `FINAL_REPORT_APPENDIX.md`
+
+---
+
+このファイルは短いチェンジログとして運用し、詳細は上記ログファイルに保管します。
 # Gemini API エラー修正 - 2026年5月18日
 
 ## エラー内容
