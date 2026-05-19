@@ -1,0 +1,94 @@
+{
+  "sketch_file": "writing_21.png",
+  "device": "cuda",
+  "topk": [
+    {
+      "rank": 1,
+      "gallery_id": 5,
+      "gallery_file": "cup02_edge.png",
+      "photo_id": 5,
+      "photo_file": "cup02.jpeg",
+      "photo_source_path": "/home/irsl/workspace/CLIP_DB/photos/cup02.jpeg",
+      "score": 0.592502772808075,
+      "photo_web_path": "/touch/sbir_photos/r1_cup02.jpeg"
+    },
+    {
+      "rank": 2,
+      "gallery_id": 6,
+      "gallery_file": "cup03_edge.png",
+      "photo_id": 6,
+      "photo_file": "cup03.jpeg",
+      "photo_source_path": "/home/irsl/workspace/CLIP_DB/photos/cup03.jpeg",
+      "score": 0.5782395005226135,
+      "photo_web_path": "/touch/sbir_photos/r2_cup03.jpeg"
+    },
+    {
+      "rank": 3,
+      "gallery_id": 7,
+      "gallery_file": "cup04_edge.png",
+      "photo_id": 7,
+      "photo_file": "cup04.jpeg",
+      "photo_source_path": "/home/irsl/workspace/CLIP_DB/photos/cup04.jpeg",
+      "score": 0.5727288722991943,
+      "photo_web_path": "/touch/sbir_photos/r3_cup04.jpeg"
+    },
+    {
+      "rank": 4,
+      "gallery_id": 3,
+      "gallery_file": "can01_edge.png",
+      "photo_id": 3,
+      "photo_file": "can01.jpeg",
+      "photo_source_path": "/home/irsl/workspace/CLIP_DB/photos/can01.jpeg",
+      "score": 0.5151822566986084,
+      "photo_web_path": "/touch/sbir_photos/r4_can01.jpeg"
+    },
+    {
+      "rank": 5,
+      "gallery_id": 4,
+      "gallery_file": "cup01_edge.png",
+      "photo_id": 4,
+      "photo_file": "cup01.jpeg",
+      "photo_source_path": "/home/irsl/workspace/CLIP_DB/photos/cup01.jpeg",
+      "score": 0.49226123094558716,
+      "photo_web_path": "/touch/sbir_photos/r5_cup01.jpeg"
+    }
+  ],
+  "sketch_web_path": "/touch/sbir_sketches/writing_21.png",
+  "vlm_decision": {
+    "extracted_features": "The sketch shows a cylindrical object, like a mug or cup, with a distinct handle attached to its side. The handle is drawn as a loop, not as a simple extension from the rim.",
+    "candidate_analysis": [
+      {
+        "id": 1,
+        "has_features": true,
+        "reasoning": "This is a mug with a cylindrical body and a side handle, which perfectly matches the key features of the sketch."
+      },
+      {
+        "id": 2,
+        "has_features": false,
+        "reasoning": "This is a cup that lacks a handle, a primary feature in the sketch."
+      },
+      {
+        "id": 3,
+        "has_features": false,
+        "reasoning": "This is a cup that lacks a handle, a primary feature in the sketch."
+      },
+      {
+        "id": 4,
+        "has_features": false,
+        "reasoning": "This is a beverage can and does not have a handle."
+      },
+      {
+        "id": 5,
+        "has_features": false,
+        "reasoning": "While this object has a handle, its shape and attachment point (extending from the top rim) are significantly different from the looped side handle shown in the sketch."
+      }
+    ],
+    "remaining_candidates": [
+      1
+    ],
+    "action_type": "execute",
+    "reasoning": "Only one candidate, ID 1, possesses the essential features drawn in the sketch: a cylindrical body and a handle attached to the side. All other candidates were eliminated because they either lack a handle entirely or the handle's style is a clear mismatch.",
+    "selected_id": 1,
+    "robot_question": null
+  }
+}

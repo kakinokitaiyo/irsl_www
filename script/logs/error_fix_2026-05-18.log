@@ -1,0 +1,29 @@
+[2026-05-18 ERROR FIX LOG - RAW]
+
+Original Gemini API error encountered during VLM processing:
+
+[ERROR] VLM processing failed: Gemini API call failed: 400 INVALID_ARGUMENT.
+{'error': {'code': 400, 'message': 'Budget 0 is invalid. This model only works in thinking mode.', 'status': 'INVALID_ARGUMENT'}}
+
+Stack / relevant snippet:
+
+config=types.GenerateContentConfig(
+    temperature=0.2,
+    thinking_config=types.ThinkingConfig(thinking_budget=0)  # ❌ Budget 0 は無効
+)
+
+Fix applied:
+
+config=types.GenerateContentConfig(
+    temperature=0.2  # Removed invalid thinking_config
+)
+
+Verification logs (excerpt):
+
+[INFO] Saved image to: writing_26.png
+[INFO] Initiating VLM reverse questioning...
+[INFO] VLM processing completed ✅ (no error)
+
+Further notes:
+- Ensure GEMINI_API_KEY is set in environment for runtime integration tests.
+- Keep this raw log for debugging and audit; short changelog is kept in ERROR_FIX_LOG.md

@@ -75,34 +75,49 @@ def build_vlm_prompt() -> str:
     """Build the system prompt for VLM reverse questioning."""
     return """あなたは自律移動ロボットの視覚・推論エンジンです。
 ユーザーが描いた「ラフスケッチ」と、検索システムが抽出した「候補画像（1〜5）」が与えられます。
-ユーザーは、このスケッチの特徴に最も近い現実の物体を探しています。
+ユーザーは、このスケッチと最も合致する現実の物体を特定する必要があります。
 
 【重要：人間のスケッチに対する許容（Tolerance）ルール】
 人間のスケッチは抽象的であり、幾何学的に極めて不正確（線の途切れ、比率の狂い、歪み、細部の省略など）です。
-ピクセルレベルの厳密な一致や、幾何学的な完全性（線が完全に閉じているか等）をロボットのように厳格に判定しないでください。
+ピクセルレベルの厳密な一致や、幾何学的な完全性をロボットのように厳格に判定しないでください。
 「ユーザーが何を表現したかったか（Semantic Intent）」を大らかに推測し、微細な形状の差異によって安易に候補を除外しないでください。
-少しでも意図が合致する可能性がある候補はすべて残してください。
+
+特徴量の抽象的な分析：
+・基本的なシルエット（輪郭、全体的なプロポーション）
+・構造的な組成（複数の主要な部分要素とその相対的配置）
+・トポロジー的な特性（穴、凹凸、連結性など）
+・表面の特性（質感、反射性、パターン）
+・スケール感（相対的なサイズ関係）
+
+候補の判定では、スケッチのこれらの特徴がどの程度合致しているかを評価してください。
+スケッチが曖昧な場合や特定の特徴が不明な場合は、複数の可能性を残してください。
 
 以下のステップで推論を行い、結果をJSON形式で出力してください。
 
-ステップ1【意図の抽出】
-スケッチから読み取れる最も特徴的な要素（全体の大まかなシルエット、特有の構造や付属パーツなど）を抽象化して言語化してください。
+ステップ1【特徴量の抽出】
+スケッチから抽出可能な「カテゴリに依存しない抽象的な特徴」を列挙してください：
+- 基本的なシルエット形状
+- 識別可能な主要な構造要素とその配置
+- スケッチに明確に表現されている視覚的な特性
 
-ステップ2【候補のフィルタリング】
-ステップ1で抽出した特徴を「意味的」に満たしている候補を残してください。スケッチが示す「基本的な物体カテゴリ」や「全体の大まかな構造」と明らかに矛盾する候補のみを除外し、判断に迷うものは必ず残します。
+ステップ2【候補のフィルタリングの絶対ルール】
+ステップ1で抽出した特徴をもとに候補を評価しますが、以下のルールを厳守してください。
+1. 除外（drop）が許されるのは、スケッチに描かれた「主要な構成要素（大きな突起、穴、大まかなシルエット）」が完全に欠落している場合のみです。
+2. 【禁止事項】構成要素が共通している候補同士（例：両方に側面の突起がある等）を比較し、その「形状の詳細（閉じているか開いているか）」「接合位置（上からか、下からか）」「太さや角度」の違いを理由に除外することは【絶対に禁止】します。
+3. ユーザーのスケッチにおける「パーツの詳細な形状」や「接合部」は最も不正確です。主要な構成要素を持つ候補は、デザインが異なって見えても全て「keep」にしてください。
 
-ステップ3【アクション決定】
-・フィルタリングの結果、候補が1つに確定できる場合は "action_type": "execute" としてください。
-・候補が2つ以上残った場合は "action_type": "ask_user" とし、残った候補同士の「決定的な視覚的差異（色、質感、特定部位の有無、形状の微細な違い）」を分析して、ユーザーにどちらを意図したのか尋ねる「逆質問」を簡潔に生成してください。
+ステップ3【アクション決定の強制】
+・ステップ2のルールを適用した結果、候補が「1つだけ」になった場合のみ "action_type": "execute" としてください。
+・【重要】ステップ2で「keep」となった候補が2つ以上ある場合は、あなたの自信度に関わらず、必ず "action_type": "ask_user" を選択してください。VLM自身の独断で最後の1つに絞り込むことは禁止します。
 
 出力形式（JSON）:
 {
-  "extracted_features": "スケッチから読み取れる特徴",
+  "extracted_features": "スケッチから抽出した特徴量（カテゴリに依存しない）",
   "candidate_analysis": [
     {
       "id": 1, 
       "status": "keep" または "drop", 
-      "reasoning": "許容ルールに基づき、なぜ残す/除外するかの理由"
+      "reasoning": "特徴量との合致度に基づき、なぜ残す/除外するかの理由"
     },
     {
       "id": 2, 
@@ -128,8 +143,8 @@ def build_vlm_prompt() -> str:
   "remaining_candidates": [残った候補のID],
   "action_type": "execute" または "ask_user",
   "selected_id": 1,
-  "reasoning": "最終判断の理由",
-  "robot_question": "（ask_userの場合）残った候補を特定するためのユーザーへの質問テキスト。executeの場合はnull"
+  "reasoning": "最終判断の理由（特徴量の観点から）",
+  "robot_question": "（ask_userの場合）スケッチの曖昧な部分について、どの視覚的特性を意図したのかを確認する質問。具体的な物体名や色名は使わず、構造や形状の特性について尋ねてください。executeの場合はnull"
 }
 
 重要：常に有効なJSONのみを返し、マークダウンやテキストは一切含めないでください。"""
@@ -379,46 +394,6 @@ def get_image_mime_type(image_path: str) -> str:
         '.webp': 'image/webp',
     }
     return mime_types.get(ext, 'image/png')
-
-
-def build_vlm_prompt() -> str:
-    """Build the system prompt for VLM reverse questioning."""
-    return """You are an expert visual understanding assistant helping a robot understand user sketches and make intelligent recommendations.
-
-Your task is to analyze a user's sketch and a set of candidate images (Top 5 from visual search), then make a strategic decision:
-
-1. **Feature Extraction (ステップ1)**: Examine the sketch carefully and identify the key geometric features, components, or visual characteristics that the user emphasized (e.g., protruding parts, handles, specific silhouette shapes, surface textures, color patterns).
-
-2. **Candidate Filtering (ステップ2)**: Review each of the 5 candidate images and determine which ones actually possess the extracted features. Even if an image has a similar overall shape, exclude it if it lacks the key distinguishing features.
-
-3. **Decision Making (ステップ3)**:
-   - If exactly ONE candidate remains after filtering: Output that candidate's ID (0-4) and explain why it's the best match.
-   - If multiple candidates remain AND you have high confidence in one: Output the most likely candidate.
-   - If multiple candidates remain but you CANNOT confidently select one: Generate a clarifying "reverse question" (逆質問) asking the user to distinguish between the candidates by asking about specific visual differences (color, texture, fine details).
-
-CRITICAL REQUIREMENTS:
-- Always respond with valid JSON only (no markdown, no additional text).
-- Images are labeled: 1=Candidate1, 2=Candidate2, 3=Candidate3, 4=Candidate4, 5=Candidate5
-- The sketch is the first image in the set.
-- Analyze ALL 6 images carefully (1 sketch + 5 candidates).
-- Be conservative: only eliminate candidates that clearly DON'T match the extracted features.
-- When uncertain, prefer asking for clarification rather than guessing wrong.
-
-Response format (JSON):
-{
-  "extracted_features": "Description of key features extracted from the sketch",
-  "candidate_analysis": [
-        {"id": 1, "has_features": true/false, "reasoning": "Why this candidate does/doesn't match"},
-        {"id": 2, "has_features": true/false, "reasoning": "..."},
-    ...
-  ],
-    "remaining_candidates": [1, 3, 5],
-  "action_type": "execute" or "ask_user",
-  "reasoning": "Why you chose this action",
-  "selected_id": 1,
-  "robot_question": "Optional: If action_type='ask_user', ask a clarifying question"
-}"""
-
 
 def call_gemini_vlm(
     client: object,

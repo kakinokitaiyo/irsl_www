@@ -1,0 +1,94 @@
+{
+  "sketch_file": "writing_20.png",
+  "device": "cuda",
+  "topk": [
+    {
+      "rank": 1,
+      "gallery_id": 5,
+      "gallery_file": "cup02_edge.png",
+      "photo_id": 5,
+      "photo_file": "cup02.jpeg",
+      "photo_source_path": "/home/irsl/workspace/CLIP_DB/photos/cup02.jpeg",
+      "score": 0.6142194867134094,
+      "photo_web_path": "/touch/sbir_photos/r1_cup02.jpeg"
+    },
+    {
+      "rank": 2,
+      "gallery_id": 6,
+      "gallery_file": "cup03_edge.png",
+      "photo_id": 6,
+      "photo_file": "cup03.jpeg",
+      "photo_source_path": "/home/irsl/workspace/CLIP_DB/photos/cup03.jpeg",
+      "score": 0.6057113409042358,
+      "photo_web_path": "/touch/sbir_photos/r2_cup03.jpeg"
+    },
+    {
+      "rank": 3,
+      "gallery_id": 7,
+      "gallery_file": "cup04_edge.png",
+      "photo_id": 7,
+      "photo_file": "cup04.jpeg",
+      "photo_source_path": "/home/irsl/workspace/CLIP_DB/photos/cup04.jpeg",
+      "score": 0.5951772928237915,
+      "photo_web_path": "/touch/sbir_photos/r3_cup04.jpeg"
+    },
+    {
+      "rank": 4,
+      "gallery_id": 1,
+      "gallery_file": "apple_edge.png",
+      "photo_id": 1,
+      "photo_file": "apple.jpeg",
+      "photo_source_path": "/home/irsl/workspace/CLIP_DB/photos/apple.jpeg",
+      "score": 0.5466006994247437,
+      "photo_web_path": "/touch/sbir_photos/r4_apple.jpeg"
+    },
+    {
+      "rank": 5,
+      "gallery_id": 2,
+      "gallery_file": "banana_edge.png",
+      "photo_id": 2,
+      "photo_file": "banana.jpeg",
+      "photo_source_path": "/home/irsl/workspace/CLIP_DB/photos/banana.jpeg",
+      "score": 0.5334048867225647,
+      "photo_web_path": "/touch/sbir_photos/r5_banana.jpeg"
+    }
+  ],
+  "sketch_web_path": "/touch/sbir_sketches/writing_20.png",
+  "vlm_decision": {
+    "extracted_features": "The sketch shows a cylindrical object with a handle attached to its side, consistent with the shape of a mug. The key features are the straight-sided cylindrical body and the C-shaped handle.",
+    "candidate_analysis": [
+      {
+        "id": 1,
+        "has_features": true,
+        "reasoning": "This candidate is a mug with a cylindrical body and a handle, which perfectly matches the key features of the sketch."
+      },
+      {
+        "id": 2,
+        "has_features": false,
+        "reasoning": "This is a cup, but it is missing the handle, which is a critical feature in the sketch."
+      },
+      {
+        "id": 3,
+        "has_features": false,
+        "reasoning": "Similar to candidate 2, this is a cup without a handle, which contradicts the sketch."
+      },
+      {
+        "id": 4,
+        "has_features": false,
+        "reasoning": "This is an apple. Its shape is spherical, not cylindrical, and it does not have a handle."
+      },
+      {
+        "id": 5,
+        "has_features": false,
+        "reasoning": "This is a banana. Its shape is elongated and curved, which does not match the sketch at all."
+      }
+    ],
+    "remaining_candidates": [
+      1
+    ],
+    "action_type": "execute",
+    "reasoning": "Only one candidate (ID 1) possesses the defining features from the sketch: a cylindrical body and a handle. The other candidates are either cups without handles or completely different objects (fruits). The match is unambiguous.",
+    "selected_id": 1,
+    "robot_question": null
+  }
+}

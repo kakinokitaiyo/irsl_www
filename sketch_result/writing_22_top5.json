@@ -1,0 +1,95 @@
+{
+  "sketch_file": "writing_22.png",
+  "device": "cuda",
+  "topk": [
+    {
+      "rank": 1,
+      "gallery_id": 7,
+      "gallery_file": "cup04_edge.png",
+      "photo_id": 7,
+      "photo_file": "cup04.jpeg",
+      "photo_source_path": "/home/irsl/workspace/CLIP_DB/photos/cup04.jpeg",
+      "score": 0.5805075764656067,
+      "photo_web_path": "/touch/sbir_photos/r1_cup04.jpeg"
+    },
+    {
+      "rank": 2,
+      "gallery_id": 6,
+      "gallery_file": "cup03_edge.png",
+      "photo_id": 6,
+      "photo_file": "cup03.jpeg",
+      "photo_source_path": "/home/irsl/workspace/CLIP_DB/photos/cup03.jpeg",
+      "score": 0.5750693678855896,
+      "photo_web_path": "/touch/sbir_photos/r2_cup03.jpeg"
+    },
+    {
+      "rank": 3,
+      "gallery_id": 5,
+      "gallery_file": "cup02_edge.png",
+      "photo_id": 5,
+      "photo_file": "cup02.jpeg",
+      "photo_source_path": "/home/irsl/workspace/CLIP_DB/photos/cup02.jpeg",
+      "score": 0.5645207762718201,
+      "photo_web_path": "/touch/sbir_photos/r3_cup02.jpeg"
+    },
+    {
+      "rank": 4,
+      "gallery_id": 3,
+      "gallery_file": "can01_edge.png",
+      "photo_id": 3,
+      "photo_file": "can01.jpeg",
+      "photo_source_path": "/home/irsl/workspace/CLIP_DB/photos/can01.jpeg",
+      "score": 0.5333450436592102,
+      "photo_web_path": "/touch/sbir_photos/r4_can01.jpeg"
+    },
+    {
+      "rank": 5,
+      "gallery_id": 4,
+      "gallery_file": "cup01_edge.png",
+      "photo_id": 4,
+      "photo_file": "cup01.jpeg",
+      "photo_source_path": "/home/irsl/workspace/CLIP_DB/photos/cup01.jpeg",
+      "score": 0.4932788908481598,
+      "photo_web_path": "/touch/sbir_photos/r5_cup01.jpeg"
+    }
+  ],
+  "sketch_web_path": "/touch/sbir_sketches/writing_22.png",
+  "vlm_decision": {
+    "extracted_features": "スケッチは、主に2つの構成要素から成ります。1つは縦長の円筒形またはカップ状の本体で、上部に開口部があります。もう1つは、本体の側面から横に突き出た大きな突起（取っ手）です。この突起は本体と連結しています。",
+    "candidate_analysis": [
+      {
+        "id": 1,
+        "status": "drop",
+        "reasoning": "スケッチに明確に描かれている主要な構成要素である、側面の大きな突起（取っ手）が完全に欠落しています。"
+      },
+      {
+        "id": 2,
+        "status": "drop",
+        "reasoning": "スケッチに明確に描かれている主要な構成要素である、側面の大きな突起（取っ手）が完全に欠落しています。"
+      },
+      {
+        "id": 3,
+        "status": "keep",
+        "reasoning": "スケッチの主要な構成要素である「円筒形の本体」と「側面の突起（取っ手）」の両方を備えています。"
+      },
+      {
+        "id": 4,
+        "status": "drop",
+        "reasoning": "スケッチに明確に描かれている主要な構成要素である、側面の大きな突起（取っ手）が完全に欠落しています。"
+      },
+      {
+        "id": 5,
+        "status": "keep",
+        "reasoning": "スケッチの主要な構成要素である「カップ状の本体」と「側面の突起（取っ手）」の両方を備えています。"
+      }
+    ],
+    "remaining_candidates": [
+      3,
+      5
+    ],
+    "action_type": "ask_user",
+    "selected_id": null,
+    "reasoning": "スケッチに描かれた「本体」と「側面の取っ手」という主要な構造を持つ候補が複数（3, 5）存在します。スケッチは取っ手の具体的な形状（閉じているか、開いているか）や取り付け位置を特定するには曖昧なため、ルールに基づきユーザーに確認が必要です。",
+    "robot_question": "探している物体の側面についている部分は、指を通すための閉じた輪の形をしていますか？それとも、上部から伸びる一つの開いた持ち手のような形ですか？"
+  }
+}
