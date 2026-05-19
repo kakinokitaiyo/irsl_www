@@ -9,6 +9,14 @@ import rospy
 from std_msgs.msg import String
 from base64 import b64decode
 
+# Import VLM module for reverse questioning
+try:
+    from gemini_api import init_gemini_client, process_sbir_with_vlm
+    VLM_AVAILABLE = True
+except ImportError:
+    VLM_AVAILABLE = False
+    rospy.logwarn("VLM module not available. Skipping VLM processing.")
+
 
 result_pub = None
 
@@ -153,6 +161,21 @@ def callback(msg):
         result_json = run_sbir_once(output_path)
         parsed = parse_json_from_mixed_output(result_json)
         parsed = enrich_result_for_web(parsed, output_path)
+
+        # VLM Post-processing: Reverse questioning for candidate filtering
+        if VLM_AVAILABLE and os.getenv("ENABLE_VLM", "true").lower() == "true":
+            try:
+                rospy.loginfo("Initiating VLM reverse questioning...")
+                vlm_client = init_gemini_client(os.getenv("GEMINI_API_KEY"))
+                parsed = process_sbir_with_vlm(parsed, output_path, client=vlm_client)
+                rospy.loginfo("VLM processing completed")
+            except Exception as e:
+                rospy.logerr("VLM processing failed, continuing with SBIR results only: %s", str(e))
+        else:
+            if not VLM_AVAILABLE:
+                rospy.logwarn("VLM module not available, skipping reverse questioning")
+            elif os.getenv("ENABLE_VLM", "true").lower() != "true":
+                rospy.loginfo("VLM processing disabled by environment variable")
 
         result_dir = os.path.join(os.path.dirname(__file__), '..', 'sketch_result')
         os.makedirs(result_dir, exist_ok=True)

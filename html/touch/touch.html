@@ -38,6 +38,7 @@
     <div id="sbir-status">まだ結果はありません</div>
     <div id="sbir-query"></div>
     <div id="sbir-results"></div>
+    <div id="vlm-decision-panel"></div>
   </div>
   <br />
   <!-- No Log
@@ -73,6 +74,7 @@
           const statusEl = document.getElementById('sbir-status');
           const queryEl = document.getElementById('sbir-query');
           const resultsEl = document.getElementById('sbir-results');
+          const vlmEl = document.getElementById('vlm-decision-panel');
 
           if (!statusEl || !queryEl || !resultsEl) return;
 
@@ -107,6 +109,62 @@
             </div>
             `;
           }).join('');
+
+          // Render VLM decision if available
+          if (payload.vlm_decision && vlmEl) {
+            renderVlmDecision(payload.vlm_decision, vlmEl);
+          } else if (vlmEl) {
+            vlmEl.innerHTML = '';
+          }
+        }
+
+        function renderVlmDecision(decision, container) {
+          if (!decision) return;
+
+          const actionType = decision.action_type || 'unknown';
+          const reasoning = decision.reasoning || '';
+          const extractedFeatures = decision.extracted_features || '';
+          const selectedId = decision.selected_id;
+          const question = decision.robot_question || '';
+          const remainingCandidates = Array.isArray(decision.remaining_candidates) 
+            ? decision.remaining_candidates 
+            : [];
+
+          let html = '<div style="margin-top: 15px; padding: 10px; border: 1px solid #ddd; border-radius: 5px; background-color: #f9f9f9;">';
+          html += '<h4 style="margin-top: 0; color: #333;">🤖 VLM逆質問分析</h4>';
+          
+          if (extractedFeatures) {
+            html += `<p><b>抽出された特徴:</b> ${escapeHtml(extractedFeatures)}</p>`;
+          }
+
+          if (actionType === 'execute' && selectedId !== undefined) {
+            html += `<div style="background-color: #d4edda; padding: 8px; border-radius: 4px; margin: 8px 0;">
+              <p style="margin: 0; color: #155724;"><b>✓ 決定:</b> 候補#${selectedId}を推奨</p>
+              <p style="margin: 5px 0 0 0; color: #155724; font-size: 12px;">${escapeHtml(reasoning)}</p>
+            </div>`;
+          } else if (actionType === 'ask_user' && question) {
+            html += `<div style="background-color: #fff3cd; padding: 8px; border-radius: 4px; margin: 8px 0;">
+              <p style="margin: 0; color: #856404;"><b>❓ ユーザーへの質問:</b></p>
+              <p style="margin: 5px 0 0 0; color: #856404; font-size: 13px;">${escapeHtml(question)}</p>
+            </div>`;
+            
+            if (remainingCandidates.length > 0) {
+              html += `<p style="margin-top: 8px; font-size: 12px; color: #666;">
+                <b>残った候補:</b> ${remainingCandidates.map(id => `#${id}`).join(', ')}
+              </p>`;
+            }
+          } else {
+            html += `<p style="color: #999;"><i>VLM処理が実行されましたが、決定結果が利用できません。</i></p>`;
+          }
+
+          html += '</div>';
+          container.innerHTML = html;
+        }
+
+        function escapeHtml(text) {
+          const div = document.createElement('div');
+          div.textContent = text;
+          return div.innerHTML;
         }
 
       function callbackAudioBlob(blob) {
