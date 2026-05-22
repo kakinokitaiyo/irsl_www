@@ -11,18 +11,21 @@
 - どう動くか
 - どのファイルが何を担当するか
 - 実行方法や注意点
+- **2026-05-22 の最新変更点**（`ask_user/execute/resketch`、`yes_no/multi_choice`）も先頭に追記済みです。
 
 ### 2. [PROMPT_IMPROVEMENT.md](PROMPT_IMPROVEMENT.md)
 - VLM の判断方針を知りたいときに読むファイルです。
 - どんな特徴を重視するか
 - どんなときに候補を残すか
 - 逆質問をどう作るか
+- **最新追記:** 候補数に応じて `yes_no` と `multi_choice` を切り替える方針を追加。
 
 ## 次に読むもの
 
 ### 3. [FINAL_REPORT.md](FINAL_REPORT.md)
 - 実装の成果を短くまとめた報告書です。
 - 目的、成果、次の改善案を知りたいときに向いています。
+- **最新追記:** 2026-05-22 の変更（UI選択肢追加・モデルフォールバック）を反映済み。
 
 ### 4. [FINAL_REPORT_APPENDIX.md](FINAL_REPORT_APPENDIX.md)
 - 最終報告の詳細版です。
@@ -42,6 +45,13 @@
 - [test_vlm_integration.py](test_vlm_integration.py): 統合テスト用
 - [sub_audio.py](sub_audio.py) / [cog_speech.py](cog_speech.py) / [text_to_speech.py](text_to_speech.py): 音声関連
 
+## 現在の重要仕様（2026-05-22）
+
+- `action_type`: `execute` / `ask_user` / `resketch`
+- `question_mode`: `yes_no`（2候補）/ `multi_choice`（3候補以上）
+- UI選択: `yes` / `no` / `neither` / `resketch`
+- モデル名不正時: `gemini-2.5-pro` へのフォールバック
+
 ## おすすめの読み順
 
 1. [IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md)
@@ -57,4 +67,13 @@
 - 「今までの結果を短く知りたい」→ [FINAL_REPORT.md](FINAL_REPORT.md)
 - 「詳しい技術内容を見たい」→ [FINAL_REPORT_APPENDIX.md](FINAL_REPORT_APPENDIX.md)
 - 「エラーの原因と修正を見たい」→ [ERROR_FIX_LOG.md](ERROR_FIX_LOG.md)
+
+## すぐ試すとき（最小）
+
+```bash
+export GEMINI_API_KEY="your-key"
+export ENABLE_VLM=true
+export GEMINI_MODEL="gemini-2.5-pro"
+python3 sub_writing1.py
+```
 

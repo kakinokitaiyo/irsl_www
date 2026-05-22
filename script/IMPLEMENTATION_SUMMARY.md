@@ -1,16 +1,64 @@
 # Gemini VLM 逆質問統合 - 実装完了サマリー
 
+> 2026-05-22 更新（重要）
+>
+> このファイルの下部には過去の記述も残っています。実運用で参照すべき最新仕様はこの更新セクションです。
+
+## 最新変更サマリー（2026-05-22）
+
+### 1) 逆質問フローの拡張
+
+- `action_type` を 3 分岐化
+  - `execute`: 候補1件に確定
+  - `ask_user`: 追加質問で絞り込み
+  - `resketch`: Top5に正解が無い可能性が高い
+- `question_mode` を導入
+  - `yes_no`: 候補2件
+  - `multi_choice`: 候補3件以上（YES/NOでは選べない）
+
+### 2) ユーザー操作（UI）
+
+- `touch.html` で以下の入力をサポート
+  - `yes`
+  - `no`
+  - `neither`（どちらでもない）
+  - `resketch`（もう一度描く）
+- 類似候補が3件以上ある場合は、候補ボタン選択式に切替
+- ユーザー回答を `/vlm_user_feedback` に publish
+
+### 3) VLM 応答正規化の強化（`gemini_api.py`）
+
+- `candidate_analysis` から `remaining_candidates` を再構築
+- 候補数と `action_type` の整合を強制
+  - keep=0 → `resketch`
+  - keep=1 → `execute`
+  - keep>=2 → `ask_user`
+- ID を UI 表示用に 1..5 へ正規化
+
+### 4) モデル指定エラー対策
+
+- `GEMINI_MODEL` が不正形式で失敗した場合、`gemini-2.5-pro` へ自動フォールバック
+- `unexpected model name format` の復旧性を改善
+
+### 5) 現在の実運用 JSON スキーマ（抜粋）
+
+```json
+{
+  "action_type": "execute | ask_user | resketch",
+  "question_mode": "null | yes_no | multi_choice",
+  "binary_mapping": {"yes_candidate_id": 1, "no_candidate_id": 3},
+  "user_options": ["yes", "no", "neither", "resketch"],
+  "decision_schema_version": "2.0"
+}
+```
+
+---
+
 ## 実装内容
 
 ### 1. **gemini_api.py** - VLMコア機能モジュール
 
 **主な関数:**
-- `init_gemini_client()`: Gemini API クライアント初期化
-- `encode_image_to_base64()`: 画像をBase64にエンコード
-- `get_image_mime_type()`: ファイル拡張子からMIMEタイプを判定
-- `build_vlm_prompt()`: システムプロンプト生成（意図抽出 → 再評価 → アクション決定）
-- `call_gemini_vlm()`: Gemini APIへ画像とプロンプトを送信
-- `process_sbir_with_vlm()`: SBIR結果をVLMで後処理
 
 **処理フロー:**
 1. スケッチ + Top5候補 計6枚を Base64 エンコード
@@ -34,9 +82,6 @@
 ### 2. **sub_writing1.py** - ROS統合
 
 **修正内容:**
-- `gemini_api` モジュールをインポート（失敗時は graceful fallback）
-- コールバック内で SBIR 実行後に VLM 処理を呼び出し
-- 環境変数 `ENABLE_VLM` でオンオフ可能
 
 **処理順序:**
 ```
@@ -49,15 +94,10 @@
 ```
 
 **VLM失敗時:**
-- エラーをログ出力して SBIR 結果のみを返す
-- パイプラインの継続を保証
 
 ### 3. **touch.html** - フロントエンド拡張
 
 **追加機能:**
-- `#vlm-decision-panel`: VLM決定結果の表示パネル
-- `renderVlmDecision()`: VLM結果の HTML レンダリング
-- `escapeHtml()`: XSS 対策
 
 **表示例:**
 
@@ -77,9 +117,6 @@
 ```
 
 **スタイリング:**
-- 決定確定: 緑背景（`#d4edda`）
-- ユーザー質問: 黄背景（`#fff3cd`）
-- マーク: ✓ (確定), ❓ (質問), 🤖 (VLM)
 
 ### 4. **.env.example** - 環境変数テンプレート
 
@@ -97,12 +134,6 @@ DB_CONNECT_RETRY_SECONDS=1.5
 ### 5. **VLM_INTEGRATION.md** - ドキュメント
 
 詳細なセットアップガイド:
-- Gemini API キー取得手順
-- VLMの3ステップフロー説明
-- 出力JSON形式仕様
-- 使用例（Python、CLIテスト）
-- トラブルシューティング
-- パフォーマンス情報
 
 ## VLM の動作メカニズム
 
@@ -191,9 +222,6 @@ python3 gemini_api.py \
 | 合計 | 6-18秒 | 非同期実行で短縮可能 |
 
 **最適化:**
-- 画像サイズを 768x768 以下に
-- API 呼び出しを非同期化（別エージェント）
-- キャッシング層の追加
 
 ## 今後の拡張案
 
@@ -248,19 +276,11 @@ python3 sub_writing1.py
 ## 注意事項
 
 ⚠️ **API 利用制限:**
-- Gemini API は無料枠で monthly quota あり
-- 本運用では API cost を考慮
-- 実行前に quota 確認を推奨
 
 ⚠️ **画像処理:**
-- 超大画像はAPI側で拒否される可能性
-- 推奨解像度: 256x256 ~ 768x768
 
 ⚠️ **デバッグモード:**
-- `ENABLE_VLM=false` でVLM処理をスキップして確認可能
-- VLM失敗時は常に SBIR 結果のみが返される
 
----
 
 **実装完了日:** 2026年5月18日  
 **ステータス:** ✅ 本番運用可能
