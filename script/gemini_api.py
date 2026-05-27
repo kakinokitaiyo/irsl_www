@@ -393,7 +393,7 @@ def _normalize_vlm_decision(vlm_decision: Dict) -> Dict:
             vlm_decision["binary_mapping"] = None
             vlm_decision["choice_candidates"] = remaining_ids
             if not vlm_decision.get("robot_question"):
-                vlm_decision["robot_question"] = "似た候補が複数あります。最も近い候補を選ぶか、どちらでもないを選択してください。"
+                vlm_decision["robot_question"] = "似た候補が複数あります。最も近い候補を選ぶか、どれでもないを選択してください。"
             vlm_decision["user_options"] = ["select_candidate", "neither", "resketch"]
             vlm_decision["selected_id"] = None
 
@@ -403,7 +403,7 @@ def _normalize_vlm_decision(vlm_decision: Dict) -> Dict:
         vlm_decision["selected_id"] = None
         if not vlm_decision.get("robot_question"):
             vlm_decision["robot_question"] = "Top5内に該当候補が無い可能性があります。もう一度スケッチを描いてください。"
-        vlm_decision["user_options"] = ["resketch"]
+        vlm_decision["user_options"] = ["neither", "resketch"]
 
     else:  # execute
         vlm_decision["question_mode"] = None

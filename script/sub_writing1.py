@@ -19,6 +19,8 @@ except ImportError:
 
 
 result_pub = None
+excluded_gallery_ids_by_sketch = {}
+latest_result_by_sketch = {}
 
 
 def enrich_result_for_web(parsed: dict, sketch_path: str) -> dict:
@@ -81,7 +83,7 @@ def parse_json_from_mixed_output(output: str) -> dict:
     raise ValueError(f"No valid JSON found in SBIR output: {text[:300]}")
 
 
-def run_sbir_once(sketch_path: str) -> str:
+def run_sbir_once(sketch_path: str, exclude_gallery_ids=None) -> str:
     clip_db_root = os.getenv("CLIP_DB_ROOT", "/home/irsl/workspace/CLIP_DB")
     sbir_script = os.path.join(clip_db_root, "src", "run_sbir_once_from_db.py")
 
@@ -123,6 +125,11 @@ def run_sbir_once(sketch_path: str) -> str:
         os.getenv("SBIR_MODEL_PATH", "/home/irsl/workspace/SketchScape/models/fscoco_normal.pth"),
     ]
 
+    if exclude_gallery_ids:
+        ids = [str(int(v)) for v in exclude_gallery_ids if isinstance(v, int)]
+        if ids:
+            cmd.extend(["--exclude_gallery_ids", ",".join(ids)])
+
     try:
         completed = subprocess.run(cmd, check=True, capture_output=True, text=True)
         return completed.stdout.strip()
@@ -133,6 +140,123 @@ def run_sbir_once(sketch_path: str) -> str:
             f"SBIR command failed (exit={e.returncode}) "
             f"stderr={stderr or '<empty>'} stdout={stdout or '<empty>'}"
         ) from e
+
+
+def process_and_publish_sbir(sketch_path: str, exclude_gallery_ids=None) -> dict:
+    result_json = run_sbir_once(sketch_path, exclude_gallery_ids=exclude_gallery_ids)
+    parsed = parse_json_from_mixed_output(result_json)
+    parsed = enrich_result_for_web(parsed, sketch_path)
+
+    # VLM Post-processing: Reverse questioning for candidate filtering
+    if VLM_AVAILABLE and os.getenv("ENABLE_VLM", "true").lower() == "true":
+        try:
+            rospy.loginfo("Initiating VLM reverse questioning...")
+            vlm_client = init_gemini_client(os.getenv("GEMINI_API_KEY"))
+            parsed = process_sbir_with_vlm(parsed, sketch_path, client=vlm_client)
+            rospy.loginfo("VLM processing completed")
+        except Exception as e:
+            rospy.logerr("VLM processing failed, continuing with SBIR results only: %s", str(e))
+    else:
+        if not VLM_AVAILABLE:
+            rospy.logwarn("VLM module not available, skipping reverse questioning")
+        elif os.getenv("ENABLE_VLM", "true").lower() != "true":
+            rospy.loginfo("VLM processing disabled by environment variable")
+
+    result_dir = os.path.join(os.path.dirname(__file__), '..', 'sketch_result')
+    os.makedirs(result_dir, exist_ok=True)
+    result_path = os.path.join(
+        result_dir,
+        os.path.splitext(os.path.basename(sketch_path))[0] + '_top5.json'
+    )
+    with open(result_path, 'w', encoding='utf-8') as f:
+        json.dump(parsed, f, ensure_ascii=False, indent=2)
+
+    sketch_file = parsed.get("sketch_file") or os.path.basename(sketch_path)
+    latest_result_by_sketch[sketch_file] = parsed
+
+    if result_pub is not None:
+        result_pub.publish(String(data=json.dumps(parsed, ensure_ascii=False)))
+
+    rospy.loginfo("SBIR result saved to: %s", result_path)
+    return parsed
+
+
+def feedback_callback(msg):
+    try:
+        payload = json.loads(msg.data)
+    except Exception as e:
+        rospy.logwarn("Failed to parse /vlm_user_feedback payload: %s", str(e))
+        return
+
+    sketch_file = payload.get("sketch_file")
+    answer = str(payload.get("answer", "")).strip().lower()
+
+    if not sketch_file:
+        rospy.logwarn("/vlm_user_feedback missing sketch_file")
+        return
+
+    # 決定操作（yes/no/choose）後は一時除外を解除して、次回はDB全体から探索できるようにする
+    is_decision_answer = (
+        answer in {"yes", "no"}
+        or answer.startswith("choose:")
+    )
+    if is_decision_answer:
+        if sketch_file in excluded_gallery_ids_by_sketch:
+            excluded_gallery_ids_by_sketch[sketch_file] = set()
+            rospy.loginfo(
+                "Decision answer '%s' received. Cleared temporary exclusions for %s",
+                answer,
+                sketch_file,
+            )
+        return
+
+    # 再スケッチ選択時も除外を解除
+    if answer == "resketch":
+        if sketch_file in excluded_gallery_ids_by_sketch:
+            excluded_gallery_ids_by_sketch[sketch_file] = set()
+            rospy.loginfo("Resketch selected. Cleared temporary exclusions for %s", sketch_file)
+        return
+
+    if answer != "neither":
+        return
+
+    latest = latest_result_by_sketch.get(sketch_file)
+    if not latest:
+        rospy.logwarn("No cached SBIR result found for sketch_file=%s", sketch_file)
+        return
+
+    topk = latest.get("topk", []) if isinstance(latest, dict) else []
+    current_gallery_ids = []
+    for item in topk:
+        if not isinstance(item, dict):
+            continue
+        gid = item.get("gallery_id")
+        if isinstance(gid, int):
+            current_gallery_ids.append(gid)
+        elif isinstance(gid, str) and gid.isdigit():
+            current_gallery_ids.append(int(gid))
+
+    if not current_gallery_ids:
+        rospy.logwarn("No gallery_id found in current Top5 for sketch_file=%s", sketch_file)
+        return
+
+    excluded = excluded_gallery_ids_by_sketch.setdefault(sketch_file, set())
+    excluded.update(current_gallery_ids)
+
+    sketch_path = os.path.join(os.path.dirname(__file__), '..', 'sketch', sketch_file)
+    if not os.path.isfile(sketch_path):
+        rospy.logwarn("Sketch file not found for re-search: %s", sketch_path)
+        return
+
+    try:
+        rospy.loginfo(
+            "'どれでもない' received. Re-running SBIR with temporary exclusion (count=%d) for %s",
+            len(excluded),
+            sketch_file,
+        )
+        process_and_publish_sbir(sketch_path, exclude_gallery_ids=sorted(excluded))
+    except Exception as e:
+        rospy.logerr("SBIR re-search after 'neither' failed: %s", str(e))
 
 def callback(msg):
     data = msg.data
@@ -158,38 +282,9 @@ def callback(msg):
     rospy.loginfo("Saved image to: %s", output_path)
 
     try:
-        result_json = run_sbir_once(output_path)
-        parsed = parse_json_from_mixed_output(result_json)
-        parsed = enrich_result_for_web(parsed, output_path)
-
-        # VLM Post-processing: Reverse questioning for candidate filtering
-        if VLM_AVAILABLE and os.getenv("ENABLE_VLM", "true").lower() == "true":
-            try:
-                rospy.loginfo("Initiating VLM reverse questioning...")
-                vlm_client = init_gemini_client(os.getenv("GEMINI_API_KEY"))
-                parsed = process_sbir_with_vlm(parsed, output_path, client=vlm_client)
-                rospy.loginfo("VLM processing completed")
-            except Exception as e:
-                rospy.logerr("VLM processing failed, continuing with SBIR results only: %s", str(e))
-        else:
-            if not VLM_AVAILABLE:
-                rospy.logwarn("VLM module not available, skipping reverse questioning")
-            elif os.getenv("ENABLE_VLM", "true").lower() != "true":
-                rospy.loginfo("VLM processing disabled by environment variable")
-
-        result_dir = os.path.join(os.path.dirname(__file__), '..', 'sketch_result')
-        os.makedirs(result_dir, exist_ok=True)
-        result_path = os.path.join(
-            result_dir,
-            os.path.splitext(os.path.basename(output_path))[0] + '_top5.json'
-        )
-        with open(result_path, 'w', encoding='utf-8') as f:
-            json.dump(parsed, f, ensure_ascii=False, indent=2)
-
-        if result_pub is not None:
-            result_pub.publish(String(data=json.dumps(parsed, ensure_ascii=False)))
-
-        rospy.loginfo("SBIR result saved to: %s", result_path)
+        sketch_file = os.path.basename(output_path)
+        excluded_gallery_ids_by_sketch[sketch_file] = set()
+        process_and_publish_sbir(output_path, exclude_gallery_ids=[])
     except Exception as e:
         rospy.logerr("SBIR failed: %s", str(e))
 
@@ -199,5 +294,6 @@ if __name__ == "__main__":
     result_pub = rospy.Publisher("/sbir_top5", String, queue_size=10)
 
     sub = rospy.Subscriber("/writing", String, callback)
+    feedback_sub = rospy.Subscriber("/vlm_user_feedback", String, feedback_callback)
 
     rospy.spin()
