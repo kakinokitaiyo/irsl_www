@@ -157,6 +157,24 @@ def build_vlm_prompt() -> str:
 重要：常に有効なJSONのみを返し、マークダウンやテキストは一切含めないでください。"""
 
 
+def build_search_query_prompt() -> str:
+    """Build prompt to extract a short text query from a sketch for CLIP reranking."""
+    return """あなたはスケッチ検索システムのクエリ生成器です。
+入力はユーザーの手描きスケッチ画像1枚です。
+このスケッチに最も適した「短い日本語検索語」を1つだけ作成してください。
+
+制約:
+- 2〜8語程度の短い名詞句
+- 曖昧語（もの、これ等）は使わない
+- 色や材質はスケッチから明確な場合のみ入れる
+- 出力はJSONのみ
+
+出力形式:
+{"search_query": "例: 取っ手付きマグカップ"}
+
+JSON以外は一切出力しないでください。"""
+
+
 def _log_info(msg: str):
     """Log info message (via rospy if available)."""
     if rospy:
@@ -179,6 +197,86 @@ def _log_error(msg: str):
         rospy.logerr(msg)
     else:
         print(f"[ERROR] {msg}")
+
+
+def extract_search_query_from_sketch(
+    sketch_path: str,
+    client: Optional[object] = None,
+    gemini_api_key: Optional[str] = None,
+    model_id: str = "gemini-robotics-er-1.6-preview",
+) -> Optional[str]:
+    """Extract a short text query from a sketch using Gemini."""
+    if not GEMINI_AVAILABLE:
+        _log_warn("google-genai not installed, cannot extract search query")
+        return None
+
+    if client is None:
+        client = init_gemini_client(gemini_api_key)
+
+    default_model = "gemini-robotics-er-1.6-preview"
+    requested_model = os.getenv("GEMINI_QUERY_MODEL", model_id).strip() or default_model
+    candidate_models = [requested_model] + ([default_model] if requested_model != default_model else [])
+
+    try:
+        mime = get_image_mime_type(sketch_path)
+        b64 = encode_image_to_base64(sketch_path)
+        parts = [
+            build_search_query_prompt(),
+            types.Part.from_bytes(data=base64.b64decode(b64), mime_type=mime),
+        ]
+
+        response_text = None
+        last_error = None
+        for idx, mid in enumerate(candidate_models):
+            try:
+                response = client.models.generate_content(
+                    model=mid,
+                    contents=parts,
+                    config=types.GenerateContentConfig(temperature=0.1),
+                )
+                response_text = (response.text or "").strip()
+                if mid != requested_model:
+                    _log_warn(f"Search-query fallback model applied: {mid}")
+                break
+            except Exception as inner_e:
+                last_error = inner_e
+                msg = str(inner_e).lower()
+                retryable = (
+                    "unexpected model name format" in msg
+                    or "model not found" in msg
+                    or "invalid_argument" in msg
+                )
+                if idx < len(candidate_models) - 1 and retryable:
+                    continue
+                raise
+
+        if response_text is None and last_error is not None:
+            raise last_error
+
+        text = response_text.strip()
+        if text.startswith("```"):
+            parts_split = text.split("```")
+            if len(parts_split) >= 3:
+                text = parts_split[1].strip()
+                if text.startswith("json"):
+                    text = text[4:].strip()
+
+        query = None
+        try:
+            obj = json.loads(text)
+            if isinstance(obj, dict):
+                query = obj.get("search_query")
+        except Exception:
+            query = text.splitlines()[0].strip() if text else None
+
+        if isinstance(query, str):
+            query = query.strip()
+        if not query:
+            return None
+        return query[:80]
+    except Exception as e:
+        _log_warn(f"Search query extraction failed: {e}")
+        return None
 
 
 def call_gemini_vlm(

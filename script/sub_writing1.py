@@ -11,7 +11,11 @@ from base64 import b64decode
 
 # Import VLM module for reverse questioning
 try:
-    from gemini_api import init_gemini_client, process_sbir_with_vlm
+    from gemini_api import (
+        init_gemini_client,
+        process_sbir_with_vlm,
+        extract_search_query_from_sketch,
+    )
     VLM_AVAILABLE = True
 except ImportError:
     VLM_AVAILABLE = False
@@ -21,6 +25,7 @@ except ImportError:
 result_pub = None
 excluded_gallery_ids_by_sketch = {}
 latest_result_by_sketch = {}
+clip_query_by_sketch = {}
 
 
 def enrich_result_for_web(parsed: dict, sketch_path: str) -> dict:
@@ -83,7 +88,7 @@ def parse_json_from_mixed_output(output: str) -> dict:
     raise ValueError(f"No valid JSON found in SBIR output: {text[:300]}")
 
 
-def run_sbir_once(sketch_path: str, exclude_gallery_ids=None) -> str:
+def run_sbir_once(sketch_path: str, exclude_gallery_ids=None, clip_text_query: str | None = None) -> str:
     clip_db_root = os.getenv("CLIP_DB_ROOT", "/home/irsl/workspace/CLIP_DB")
     sbir_script = os.path.join(clip_db_root, "src", "run_sbir_once_from_db.py")
 
@@ -123,12 +128,33 @@ def run_sbir_once(sketch_path: str, exclude_gallery_ids=None) -> str:
         os.getenv("SKETCHSCAPE_ROOT", "/home/irsl/workspace/SketchScape"),
         "--model_path",
         os.getenv("SBIR_MODEL_PATH", "/home/irsl/workspace/SketchScape/models/fscoco_normal.pth"),
+        "--coarse_topk",
+        os.getenv("SBIR_COARSE_TOPK", "100"),
     ]
 
     if exclude_gallery_ids:
         ids = [str(int(v)) for v in exclude_gallery_ids if isinstance(v, int)]
         if ids:
             cmd.extend(["--exclude_gallery_ids", ",".join(ids)])
+
+    if (os.getenv("ENABLE_CLIP_FUSION", "false").lower() == "true") and clip_text_query:
+        cmd.extend(
+            [
+                "--enable_clip_fusion",
+                "--clip_text_query",
+                clip_text_query,
+                "--clip_embeddings_path",
+                os.getenv("CLIP_IMAGE_EMBEDDINGS_PATH", "/home/irsl/workspace/CLIP_DB/cache/clip_image_embeddings.npz"),
+                "--scape_weight",
+                os.getenv("SBIR_SCAPE_WEIGHT", "0.7"),
+                "--clip_weight",
+                os.getenv("SBIR_CLIP_WEIGHT", "0.3"),
+                "--clip_model",
+                os.getenv("CLIP_MODEL_NAME", "ViT-B-32"),
+                "--clip_pretrained",
+                os.getenv("CLIP_PRETRAINED", "laion2b_s34b_b79k"),
+            ]
+        )
 
     try:
         completed = subprocess.run(cmd, check=True, capture_output=True, text=True)
@@ -143,7 +169,25 @@ def run_sbir_once(sketch_path: str, exclude_gallery_ids=None) -> str:
 
 
 def process_and_publish_sbir(sketch_path: str, exclude_gallery_ids=None) -> dict:
-    result_json = run_sbir_once(sketch_path, exclude_gallery_ids=exclude_gallery_ids)
+    sketch_file = os.path.basename(sketch_path)
+    clip_text_query = None
+    if os.getenv("ENABLE_CLIP_FUSION", "false").lower() == "true":
+        clip_text_query = clip_query_by_sketch.get(sketch_file)
+        if not clip_text_query and VLM_AVAILABLE:
+            try:
+                vlm_client = init_gemini_client(os.getenv("GEMINI_API_KEY"))
+                clip_text_query = extract_search_query_from_sketch(sketch_path, client=vlm_client)
+                if clip_text_query:
+                    clip_query_by_sketch[sketch_file] = clip_text_query
+                    rospy.loginfo("CLIP query extracted: %s", clip_text_query)
+            except Exception as e:
+                rospy.logwarn("Failed to extract CLIP query from sketch: %s", str(e))
+
+    result_json = run_sbir_once(
+        sketch_path,
+        exclude_gallery_ids=exclude_gallery_ids,
+        clip_text_query=clip_text_query,
+    )
     parsed = parse_json_from_mixed_output(result_json)
     parsed = enrich_result_for_web(parsed, sketch_path)
 
@@ -171,7 +215,7 @@ def process_and_publish_sbir(sketch_path: str, exclude_gallery_ids=None) -> dict
     with open(result_path, 'w', encoding='utf-8') as f:
         json.dump(parsed, f, ensure_ascii=False, indent=2)
 
-    sketch_file = parsed.get("sketch_file") or os.path.basename(sketch_path)
+    sketch_file = parsed.get("sketch_file") or sketch_file
     latest_result_by_sketch[sketch_file] = parsed
 
     if result_pub is not None:
@@ -197,7 +241,7 @@ def feedback_callback(msg):
 
     # 決定操作（yes/no/choose）後は一時除外を解除して、次回はDB全体から探索できるようにする
     is_decision_answer = (
-        answer in {"yes", "no"}
+        answer in {"yes", "no", "confirm"}
         or answer.startswith("choose:")
     )
     if is_decision_answer:
@@ -284,6 +328,7 @@ def callback(msg):
     try:
         sketch_file = os.path.basename(output_path)
         excluded_gallery_ids_by_sketch[sketch_file] = set()
+        clip_query_by_sketch.pop(sketch_file, None)
         process_and_publish_sbir(output_path, exclude_gallery_ids=[])
     except Exception as e:
         rospy.logerr("SBIR failed: %s", str(e))
