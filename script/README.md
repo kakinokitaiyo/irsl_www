@@ -111,6 +111,52 @@ export GEMINI_MODEL="gemini-2.5-pro"
 python3 sub_writing1.py
 ```
 
+## 実行コマンド集（コピペ用）
+
+### 1) CLIP フュージョンを使わない（推奨: DINOv2 のみ有効）
+
+```bash
+cd /home/irsl/workspace/irsl_www/script
+source /home/irsl/workspace/.venv.backup.1777612717/bin/activate
+
+export ENABLE_VLM=true
+export GEMINI_API_KEY="your-key"
+export ENABLE_CLIP_FUSION=false
+export ENABLE_DINOV2_FUSION=true
+export SBIR_DINO_WEIGHT=0.3
+
+python3 sub_writing1.py
+```
+
+### 2) CLIP フュージョンを使う
+
+```bash
+cd /home/irsl/workspace/irsl_www/script
+source /home/irsl/workspace/.venv.backup.1777612717/bin/activate
+
+export ENABLE_VLM=true
+export GEMINI_API_KEY="your-key"
+export ENABLE_CLIP_FUSION=true
+export CLIP_IMAGE_EMBEDDINGS_PATH="/home/irsl/workspace/CLIP_DB/cache/clip_image_embeddings.npz"
+export SBIR_CLIP_WEIGHT=0.3
+export SBIR_SCAPE_WEIGHT=0.7
+
+python3 sub_writing1.py
+```
+
+### 3) VLM なしで SBIR のみ動かす
+
+```bash
+cd /home/irsl/workspace/irsl_www/script
+source /home/irsl/workspace/.venv.backup.1777612717/bin/activate
+
+export ENABLE_VLM=false
+export ENABLE_CLIP_FUSION=false
+export ENABLE_DINOV2_FUSION=true
+
+python3 sub_writing1.py
+```
+
 ### 位置関係の補足
 
 - `sub_writing1.py` の実行場所: `irsl_www/script/`
