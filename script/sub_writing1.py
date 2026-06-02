@@ -156,6 +156,19 @@ def run_sbir_once(sketch_path: str, exclude_gallery_ids=None, clip_text_query: s
             ]
         )
 
+    # DINOv2 fusion: enable if environment flag set
+    if os.getenv("ENABLE_DINOV2_FUSION", "false").lower() == "true":
+        cmd.extend(
+            [
+                "--enable_dinov2_fusion",
+                "--dinov2_weight",
+                os.getenv("SBIR_DINO_WEIGHT", "0.3"),
+            ]
+        )
+        dinov2_npz = os.getenv("DINO_IMAGE_EMBEDDINGS_PATH", "")
+        if dinov2_npz:
+            cmd.extend(["--dinov2_embeddings_path", dinov2_npz])
+
     try:
         completed = subprocess.run(cmd, check=True, capture_output=True, text=True)
         return completed.stdout.strip()

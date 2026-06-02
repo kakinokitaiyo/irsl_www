@@ -1,5 +1,31 @@
 # Gemini VLM 逆質問統合 - 実装完了レポート
 
+## 2026-06-02 追加追記（DINOv2 再ランキング）
+
+本日、SBIR の再ランキング層に DINOv2 を導入し、`sub_writing1.py` からの実行経路も含めて end-to-end で検証しました。
+
+### 実施内容
+
+- `CLIP_DB/src/run_sbir_once_from_db.py` に DINOv2 融合オプションを追加
+	- `--enable_dinov2_fusion`
+	- `--dinov2_weight`
+	- `--dinov2_embeddings_path`
+- DINOv2 埋め込みを `home_robot.photo_embeddings` に保存済み
+- `ENABLE_DINOV2_FUSION=true` により `sub_writing1.py` からも有効化可能
+
+### 検証結果
+
+`writing_1.png` で以下を確認しました。
+
+- `apple.jpeg`: rank 7 → 1
+- `peach.jpeg`: rank 9 → 5
+
+### 位置づけ
+
+- VLM 逆質問は「最終意思決定の補助」
+- DINOv2 は「候補再ランキングの改善」
+- 両者は独立して動作し、必要に応じて併用可能
+
 ## 2026-05-22 変更追記（最新版）
 
 本日時点で、逆質問システムは以下の仕様に更新されました。

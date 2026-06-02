@@ -4,6 +4,33 @@
 >
 > このファイルの下部には過去の記述も残っています。実運用で参照すべき最新仕様はこの更新セクションです。
 
+## 追加更新サマリー（2026-06-02）
+
+### 1) DINOv2 再ランキングの導入
+
+- `run_sbir_once_from_db.py` に DINOv2 フュージョンを追加
+  - `--enable_dinov2_fusion`
+  - `--dinov2_weight`
+  - `--dinov2_embeddings_path`
+- 埋め込み参照の優先順を整理
+  - `.npz` キャッシュ
+  - DB `home_robot.photo_embeddings`
+  - オンザフライ計算（候補のみ）
+- `sub_writing1.py` からも環境変数 `ENABLE_DINOV2_FUSION=true` で有効化可能
+
+### 2) DB 保存と運用確認
+
+- DINOv2 埋め込みを PostgreSQL に保存済み
+- `writing_1.png` で end-to-end テストを実施
+  - `apple.jpeg`: rank 7 → 1
+  - `peach.jpeg`: rank 9 → 5
+
+### 3) 既存 VLM 仕様との共存
+
+- VLM 逆質問フローはそのまま維持
+- DINOv2 は SBIR の再ランキング層として動作
+- `ENABLE_CLIP_FUSION=false` のままでも DINOv2 だけ有効化可能
+
 ## 最新変更サマリー（2026-05-22）
 
 ### 1) 逆質問フローの拡張
@@ -55,6 +82,22 @@
 ---
 
 ## 実装内容
+
+### 0. **DINOv2 フュージョン** - SBIR 再ランキング層
+
+**主な処理:**
+
+1. スケッチに対して DINOv2 埋め込みを取得
+2. 候補画像について DINOv2 埋め込みを取得
+3. SketchScape スコアと正規化後に重み付き融合
+4. Top-k を再ソートして JSON 出力
+
+**運用優先順位:**
+- DB 埋め込みがあればそれを使用
+- なければ候補画像のみオンザフライで埋め込みを計算
+
+**テスト結果:**
+- `writing_1.png` で apple / peach が Top-5 に浮上
 
 ### 1. **gemini_api.py** - VLMコア機能モジュール
 

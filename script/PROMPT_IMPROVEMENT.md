@@ -2,6 +2,12 @@
 
 > 2026-05-22 追記（最新仕様）
 
+> 2026-06-02 追記（DINOv2 併用）
+
+- VLM プロンプトはそのまま維持し、SBIR 再ランキング層のみ DINOv2 を導入する方針です。
+- `ENABLE_DINOV2_FUSION=true` の場合でも、`action_type` / `question_mode` / `remaining_candidates` の仕様は変更しません。
+- DINOv2 は「Top5 を作る前の候補順位付け」を改善するために使い、VLM は「候補の意味解釈と逆質問」に使い分けます。
+
 ## 最新プロンプト方針（運用優先）
 
 現在の `gemini_api.py` のプロンプトは、以下の行動分岐を強制します。

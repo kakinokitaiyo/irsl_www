@@ -4,6 +4,22 @@
 
 このファイルは VLM 統合で発生した主要エラーと修正内容の要約です。
 
+## 追加: DINOv2 再ランキングの修正（2026-06-02）
+
+### 症状
+
+- `--enable_dinov2_fusion` を有効化した際に、DINO 埋め込みキャッシュ未指定のケースで `DINO embeddings cache not found` が発生。
+
+### 原因
+
+- `dinov2_embeddings_path` のデフォルト値が空文字扱いにならず、`Path("")` の解決結果が `.` となっていた。
+
+### 対応
+
+- `run_sbir_once_from_db.py` の引数型を `str` に変更し、空指定時は DB の `photo_embeddings` を優先して参照するよう修正。
+- 埋め込みの参照順を `npz -> DB -> on-the-fly` に整理。
+- `writing_1.png` のテストで `apple.jpeg` が rank 1、`peach.jpeg` が rank 5 まで上昇することを確認。
+
 ## 現在の使用モデル
 
 - ✅ 採用モデル: `gemini-robotics-er-1.6-preview`
