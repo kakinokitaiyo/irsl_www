@@ -48,6 +48,8 @@
   <script>
       let vlmFeedbackTopic = null;
       let lastSbirPayload = null;
+      let yesNoLocked  = false;  // YES/NO の二重送信ガード
+      let choiceLocked = false;  // 候補選択の二重送信ガード
 
       const ros = ros_start();
       if (ros) {
@@ -83,6 +85,8 @@
       // メイン描画関数
       // ---------------------------------------------------------------
       function renderSbirResult(payload) {
+        yesNoLocked  = false;
+        choiceLocked = false;
         lastSbirPayload = payload;
 
         const statusEl  = document.getElementById('sbir-status');
@@ -409,25 +413,70 @@
         vlmFeedbackTopic.publish(msg);
       }
 
+      // lockCardsAlso=false: YES/NOだけ無効化、カードは残す
+      // lockCardsAlso=true : 全ボタン・カードを無効化
+      function _lockDialoguePanel(message, lockCardsAlso) {
+        const vlmEl = document.getElementById('vlm-decision-panel');
+        if (!vlmEl) return;
+
+        vlmEl.querySelectorAll('button').forEach(btn => {
+          const action = btn.getAttribute('onclick') || '';
+          const isYesNo = action.includes("'yes'") || action.includes("'no'")
+                       || action.includes("'resketch'");
+          if (isYesNo || lockCardsAlso) {
+            btn.disabled = true;
+            btn.style.opacity = '0.35';
+          }
+        });
+
+        if (lockCardsAlso) {
+          vlmEl.querySelectorAll('div[onclick]').forEach(el => {
+            el.style.pointerEvents = 'none';
+            el.style.opacity = '0.6';
+          });
+        }
+
+        const banner = document.createElement('div');
+        banner.style.cssText = 'margin-top:10px; padding:10px 14px; background:#e3f2fd; border-radius:8px; font-size:14px; color:#1565c0; text-align:center;';
+        banner.textContent = message;
+        vlmEl.appendChild(banner);
+      }
+
       function handleVlmAnswer(answer) {
         if (!lastSbirPayload) return;
 
-        // 送信
-        publishVlmFeedback(answer);
+        // YES/NO: 1回だけ送信可。送信後もカードは選択できる
+        if (answer === 'yes' || answer === 'no') {
+          if (yesNoLocked) return;
+          yesNoLocked = true;
+          publishVlmFeedback(answer);
+          const label = answer === 'yes' ? 'YES' : 'NO';
+          _lockDialoguePanel(`${label} を送信しました。下の候補から直接選ぶこともできます。`, false);
+          return;
+        }
 
-        // UI フィードバックメッセージ
+        // 候補選択: YES/NO後でも押せるが、選択自体は1回だけ
+        if (answer.startsWith('choose:')) {
+          if (choiceLocked) return;
+          choiceLocked = true;
+          yesNoLocked  = true;
+          publishVlmFeedback(answer);
+          const n = answer.split(':')[1];
+          _lockDialoguePanel(`候補${n}を選択しました。次の質問を生成中...`, true);
+          return;
+        }
+
+        // confirm / back / resketch / neither はテキストメッセージのみ
+        publishVlmFeedback(answer);
         const panel = document.getElementById('vlm-user-answer');
         if (!panel) return;
         const messages = {
-          'yes':     'YES を送信しました。次の質問を待ちます...',
-          'no':      'NO を送信しました。次の質問を待ちます...',
-          'confirm': '確定しました。',
-          'back':    '戻ります...',
+          'confirm':  '確定しました。',
+          'back':     '戻ります...',
           'resketch': 'もう一度スケッチを描いてください。',
-          'neither': 'どれでもないを送信しました。',
+          'neither':  'どれでもないを送信しました。',
         };
-        panel.textContent = messages[answer]
-          || (answer.startsWith('choose:') ? `候補${answer.split(':')[1]}を選択しました。次の質問を待ちます...` : '回答を送信しました。');
+        panel.textContent = messages[answer] || '回答を送信しました。';
       }
 
       function escapeHtml(text) {
