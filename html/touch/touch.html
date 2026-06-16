@@ -9,6 +9,7 @@
   <script src='../ros/rosmain.js'> </script>
   <!-- -->
   <script src="touch.js?version=0001"></script>
+  <style>@keyframes sbir-spin { to { transform: rotate(360deg); } }</style>
 </head>
 <!-- https://developer.mozilla.org/ja/docs/Web/API/Touch_events -->
 <body>
@@ -48,8 +49,11 @@
   <script>
       let vlmFeedbackTopic = null;
       let lastSbirPayload = null;
-      let yesNoLocked  = false;  // YES/NO の二重送信ガード
-      let choiceLocked = false;  // 候補選択の二重送信ガード
+      let yesNoLocked    = false;  // YES/NO の二重送信ガード
+      let choiceLocked   = false;  // 候補選択の二重送信ガード
+      let isSending      = false;  // Send後のローディング表示フラグ
+      let sendingStep    = 0;      // 現在表示中のステップ
+      let stepTimerIds   = [];     // フォールバックタイマーID
 
       const ros = ros_start();
       if (ros) {
@@ -79,12 +83,37 @@
               console.log('failed to parse /sbir_top5:', e);
             }
           });
+
+          var statusTopic = new ROSLIB.Topic({
+            ros: ros,
+            name: '/sbir_status',
+            messageType: 'std_msgs/String'
+          });
+          statusTopic.subscribe(function(message) {
+            if (!isSending) return;
+            try {
+              const s = JSON.parse(message.data);
+              // リアルタイム通知が届いたらフォールバックタイマーより優先して更新
+              const stageToStep = {
+                'sketch_received': 1,
+                'sbir_running':    1,
+                'sbir_done':       2,
+                'vlm_running':     2,
+              };
+              const step = stageToStep[s.stage];
+              if (step !== undefined) showSendingPanel(step);
+            } catch (e) {
+              console.log('failed to parse /sbir_status:', e);
+            }
+          });
       }
 
       // ---------------------------------------------------------------
       // メイン描画関数
       // ---------------------------------------------------------------
       function renderSbirResult(payload) {
+        _clearStepTimers();
+        isSending    = false;
         yesNoLocked  = false;
         choiceLocked = false;
         lastSbirPayload = payload;
@@ -479,6 +508,75 @@
         panel.textContent = messages[answer] || '回答を送信しました。';
       }
 
+      // ---------------------------------------------------------------
+      // 送信中ローディングパネル
+      // ---------------------------------------------------------------
+      function buildSendingPanelHtml(currentStep) {
+        const steps = ['スケッチ受信', 'データベース検索', 'AI質問生成'];
+        const details = [
+          'サーバーにスケッチを送信しています...',
+          '画像データベースから候補を検索しています...',
+          'AIが最適な質問を生成しています...',
+        ];
+        const spinner = (sz) =>
+          `<div style="width:${sz}px;height:${sz}px;border:3px solid #dce8f8;border-top-color:#1976d2;border-radius:50%;animation:sbir-spin 0.9s linear infinite;flex-shrink:0;"></div>`;
+
+        const stepsHtml = steps.map((label, i) => {
+          const isDone    = i < currentStep;
+          const isCurrent = i === currentStep;
+          const icon = isDone
+            ? `<div style="width:26px;height:26px;background:#28a745;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:bold;flex-shrink:0;">✓</div>`
+            : isCurrent ? spinner(26)
+            : `<div style="width:26px;height:26px;border:2px solid #ccc;border-radius:50%;flex-shrink:0;"></div>`;
+          const color  = isDone ? '#2e7d32' : isCurrent ? '#1565c0' : '#bbb';
+          const weight = isCurrent ? 'bold' : 'normal';
+          const sep    = i < steps.length - 1 ? 'border-bottom:1px solid #f0f0f0;' : '';
+          return `<div style="display:flex;align-items:center;gap:12px;padding:11px 0;${sep}">
+            ${icon}
+            <div>
+              <div style="font-size:14px;font-weight:${weight};color:${color};">${label}</div>
+              ${isCurrent ? `<div style="font-size:12px;color:#888;margin-top:2px;">${details[i]}</div>` : ''}
+            </div>
+          </div>`;
+        }).join('');
+
+        return `<div class="sbir-sending-panel" style="margin-top:16px;padding:18px;border:1px solid #c8dbf0;border-radius:12px;background:#f5f9ff;">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+            ${spinner(20)}
+            <span style="font-size:15px;font-weight:bold;color:#1565c0;">解析中...</span>
+          </div>
+          <div style="background:#fff;border-radius:8px;padding:4px 14px;border:1px solid #e0eaf5;">${stepsHtml}</div>
+        </div>`;
+      }
+
+      function _clearStepTimers() {
+        stepTimerIds.forEach(id => clearTimeout(id));
+        stepTimerIds = [];
+      }
+
+      function showSendingPanel(step) {
+        if (!isSending) return;
+        // 後退しない（リアルタイム通知が逆順で来ても無視）
+        if (step < sendingStep) return;
+        sendingStep = step;
+
+        const vlmEl    = document.getElementById('vlm-decision-panel');
+        const statusEl = document.getElementById('sbir-status');
+        if (statusEl) statusEl.textContent = '解析中...';
+        if (vlmEl)    vlmEl.innerHTML      = buildSendingPanelHtml(step);
+      }
+
+      function startSendingWithFallback() {
+        _clearStepTimers();
+        sendingStep = 0;
+        showSendingPanel(0);
+        // フォールバック: ステータスが届かなくても自動で次のステップへ
+        // step0→1: 1.5秒後（スケッチ受信は通常即時）
+        stepTimerIds.push(setTimeout(() => showSendingPanel(1), 3000));
+        // step1→2: さらに4秒後（SBIR検索は1〜3秒程度）
+        stepTimerIds.push(setTimeout(() => showSendingPanel(2), 8000));
+      }
+
       function escapeHtml(text) {
         const div = document.createElement('div');
         div.textContent = String(text || '');
@@ -510,6 +608,11 @@
             var msg = new ROSLIB.Message({ data: data });
             rostopic.publish(msg);
         }
+        // ローディングパネルを即時表示（フォールバックタイマー付き）
+        isSending = true;
+        document.getElementById('sbir-query').innerHTML   = '';
+        document.getElementById('sbir-results').innerHTML = '';
+        startSendingWithFallback();
         // clear drawings
         var context = canvas.getContext('2d');
         //// background style
