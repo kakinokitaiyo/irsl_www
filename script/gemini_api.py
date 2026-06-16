@@ -575,6 +575,148 @@ def process_sbir_with_vlm(
         return sbir_result
 
 
+def build_dialogue_question_prompt(question_history: Optional[List[Dict]] = None) -> str:
+    """Prompt for dialogue-based discriminative question generation."""
+    history_block = ""
+    if question_history:
+        lines = "\n".join(
+            f"  {i+1}. 質問:「{h['question']}」→ 回答: {h['answer']}"
+            for i, h in enumerate(question_history)
+        )
+        history_block = f"""
+【過去の質問履歴（必ず避けること）】
+{lines}
+上記と同じ・または意味が重複する質問は絶対に使わないでください。
+"""
+
+    return f"""あなたはスケッチ検索ロボットの質問生成エンジンです。
+ユーザーが描いたスケッチ（1枚目）と、残り候補の画像N枚（2枚目以降、番号1〜N）が与えられます。
+ユーザーが頭の中で思い浮かべている「実物の物体」を特定するために、Yes/No質問を1つ生成してください。
+{history_block}
+質問の条件：
+- 物体の視覚的属性（色・形状・サイズ・素材・構造・用途など）についての質問
+- 与えられた候補画像をできるだけ均等に二分できる質問を選ぶ（yes と no がほぼ半々になるのが理想）
+- 過去の質問と重複・類似する質問は絶対に避けること
+- ユーザーが自分の持っているものについてYes/Noで答えられる自然な日本語の質問
+- スケッチの描き方ではなく、実物の物体の特徴を聞く質問にすること
+
+各候補画像（番号1〜N、N は実際の枚数）について、その物体が質問に「yes」か「no」かを判定してください。
+必ず全番号（1 から N まで）を yes_ids か no_ids のどちらかに入れてください。
+
+出力形式（JSONのみ、マークダウン不要）:
+{{
+  "question": "その物体は取っ手がついていますか？",
+  "yes_ids": [1, 3, 7],
+  "no_ids": [2, 4, 5, 6, 8]
+}}"""
+
+
+def generate_dialogue_question(
+    client: object,
+    sketch_path: str,
+    candidate_paths: List[str],
+    model_id: str = "gemini-robotics-er-1.6-preview",
+    question_history: Optional[List[Dict]] = None,
+) -> Dict:
+    """
+    Generate a discriminative yes/no question for dialogue-based retrieval.
+
+    Args:
+        client: Initialized Gemini client
+        sketch_path: Path to query sketch image
+        candidate_paths: List of candidate image paths (all remaining, up to ~20)
+        model_id: Gemini model to use
+        question_history: List of past {question, answer} dicts to avoid repetition
+
+    Returns:
+        {"question": str, "yes_ids": [int], "no_ids": [int]}  (1-based indices)
+    """
+    if not GEMINI_AVAILABLE:
+        raise ImportError("google-genai not installed. Run: pip install google-genai")
+
+    candidate_paths = list(candidate_paths)
+    n = len(candidate_paths)
+    if n == 0:
+        raise ValueError("No candidate paths provided")
+
+    default_model = "gemini-robotics-er-1.6-preview"
+    requested_model = os.getenv("GEMINI_MODEL", model_id).strip() or default_model
+    candidate_models = [requested_model]
+    if requested_model != default_model:
+        candidate_models.append(default_model)
+
+    parts = [build_dialogue_question_prompt(question_history=question_history)]
+
+    sketch_mime = get_image_mime_type(sketch_path)
+    sketch_b64 = encode_image_to_base64(sketch_path)
+    parts.append(types.Part.from_bytes(data=base64.b64decode(sketch_b64), mime_type=sketch_mime))
+
+    for path in candidate_paths:
+        mime = get_image_mime_type(path)
+        b64 = encode_image_to_base64(path)
+        parts.append(types.Part.from_bytes(data=base64.b64decode(b64), mime_type=mime))
+
+    response_text = None
+    last_error = None
+    for idx, mid in enumerate(candidate_models):
+        try:
+            response = client.models.generate_content(
+                model=mid,
+                contents=parts,
+                config=types.GenerateContentConfig(temperature=0.2),
+            )
+            response_text = (response.text or "").strip()
+            if mid != requested_model:
+                _log_warn(f"generate_dialogue_question fallback model: {mid}")
+            break
+        except Exception as e:
+            last_error = e
+            msg = str(e).lower()
+            retryable = (
+                "unexpected model name format" in msg
+                or "model not found" in msg
+                or "invalid_argument" in msg
+            )
+            if idx < len(candidate_models) - 1 and retryable:
+                continue
+            raise
+
+    if response_text is None and last_error is not None:
+        raise last_error
+
+    text = response_text.strip()
+    if text.startswith("```"):
+        parts_split = text.split("```")
+        if len(parts_split) >= 3:
+            text = parts_split[1].strip()
+            if text.startswith("json"):
+                text = text[4:].strip()
+
+    try:
+        result = json.loads(text)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid JSON from Gemini: {e}\nResponse: {text[:300]}")
+
+    if "question" not in result:
+        raise ValueError(f"VLM response missing 'question': {text[:200]}")
+
+    valid_ids = set(range(1, n + 1))
+    yes_ids = [i for i in result.get("yes_ids", []) if i in valid_ids]
+    no_ids = [i for i in result.get("no_ids", []) if i in valid_ids]
+
+    # 未分類の候補は no に入れる
+    assigned = set(yes_ids) | set(no_ids)
+    for i in range(1, n + 1):
+        if i not in assigned:
+            no_ids.append(i)
+
+    return {
+        "question": result["question"],
+        "yes_ids": yes_ids,
+        "no_ids": no_ids,
+    }
+
+
 if __name__ == "__main__":
     # Test the module if run directly
     import argparse

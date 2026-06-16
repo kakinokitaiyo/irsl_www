@@ -79,284 +79,362 @@
           });
       }
 
-        function renderSbirResult(payload) {
-          lastSbirPayload = payload;
+      // ---------------------------------------------------------------
+      // メイン描画関数
+      // ---------------------------------------------------------------
+      function renderSbirResult(payload) {
+        lastSbirPayload = payload;
 
-          const statusEl = document.getElementById('sbir-status');
-          const queryEl = document.getElementById('sbir-query');
-          const resultsEl = document.getElementById('sbir-results');
-          const vlmEl = document.getElementById('vlm-decision-panel');
+        const statusEl  = document.getElementById('sbir-status');
+        const queryEl   = document.getElementById('sbir-query');
+        const resultsEl = document.getElementById('sbir-results');
+        const vlmEl     = document.getElementById('vlm-decision-panel');
 
-          if (!statusEl || !queryEl || !resultsEl) return;
+        if (!statusEl || !queryEl || !resultsEl) return;
 
-          const sketchName = payload.sketch_file || '(unknown sketch)';
-          statusEl.textContent = `結果を受信しました: ${sketchName}`;
+        const sketchName = payload.sketch_file || '(unknown sketch)';
+        const actionType = payload.action_type || '';
 
-          const sketchWeb = payload.sketch_web_path;
-          queryEl.innerHTML = sketchWeb
+        // ステータス行
+        if (actionType === 'execute') {
+          statusEl.textContent = `確定: ${sketchName}`;
+        } else if (actionType === 'ask_user') {
+          const rem = payload.remaining_count ?? '?';
+          const qn  = (payload.question_history || []).length + 1;
+          statusEl.textContent = `質問 ${qn}回目 | 残り候補 ${rem}件 — ${sketchName}`;
+        } else {
+          statusEl.textContent = `受信: ${sketchName}`;
+        }
+
+        // スケッチ表示
+        const sketchWeb = payload.sketch_web_path;
+        queryEl.innerHTML = sketchWeb
           ? `<div class="query-wrap"><b>query:</b><br><img class="sbir-query-img" src="${sketchWeb}" alt="query sketch"></div>`
           : '';
 
-          const topk = Array.isArray(payload.topk) ? payload.topk : [];
-          if (topk.length === 0) {
-            resultsEl.innerHTML = '<p>結果がありません。</p>';
-            return;
+        // 候補カード表示（execute 確定時は1枚だけ大きく、それ以外は通常グリッド）
+        const topk = Array.isArray(payload.topk) ? payload.topk : [];
+        if (topk.length === 0) {
+          resultsEl.innerHTML = '<p>候補がありません。</p>';
+        } else if (actionType === 'execute') {
+          const item = topk[0];
+          const img  = item.photo_web_path || '';
+          const name = item.photo_file || item.gallery_file || '(no-name)';
+          resultsEl.innerHTML = `
+            <div class="sbir-card" style="border:3px solid #28a745; max-width:260px; margin:0 auto;">
+              <div class="sbir-rank" style="background:#28a745;">確定</div>
+              ${img ? `<img class="sbir-photo-img" src="${img}" alt="${escapeHtml(name)}">` : '<div class="sbir-photo-missing">画像なし</div>'}
+              <div class="sbir-meta" style="font-weight:bold;">${escapeHtml(name)}</div>
+            </div>`;
+        } else {
+          resultsEl.innerHTML = topk.map((item, idx) => {
+            const rank  = item.rank ?? (idx + 1);
+            const score = typeof item.score === 'number' ? item.score.toFixed(4) : (item.score || '-');
+            const name  = item.photo_file || item.gallery_file || '(no-name)';
+            const img   = item.photo_web_path || '';
+            return `
+              <div class="sbir-card" data-rank="${rank}" id="sbir-card-${rank}">
+                <div class="sbir-rank">#${rank}</div>
+                ${img ? `<img class="sbir-photo-img" src="${img}" alt="rank ${rank}: ${escapeHtml(name)}">` : '<div class="sbir-photo-missing">画像なし</div>'}
+                <div class="sbir-meta">${escapeHtml(name)}</div>
+                <div class="sbir-meta">score: ${score}</div>
+              </div>`;
+          }).join('');
+        }
+
+        // 対話パネルの描画
+        if (!vlmEl) return;
+        // 新フォーマット（action_type がトップレベルにある）
+        if (actionType) {
+          renderDialoguePanel(payload, vlmEl);
+        // 旧フォーマット（vlm_decision が別フィールドにある）
+        } else if (payload.vlm_decision) {
+          renderVlmDecision(payload.vlm_decision, vlmEl);
+        } else {
+          vlmEl.innerHTML = '';
+        }
+      }
+
+      // ---------------------------------------------------------------
+      // 新フォーマット用: 対話パネル描画
+      // ---------------------------------------------------------------
+      function renderDialoguePanel(payload, container) {
+        const actionType  = payload.action_type || '';
+        const question    = payload.robot_question || '';
+        const remaining   = payload.remaining_count ?? '?';
+        const history     = Array.isArray(payload.question_history) ? payload.question_history : [];
+        const questionMode = payload.question_mode || null;
+        const topk        = Array.isArray(payload.topk) ? payload.topk : [];
+
+        let html = '<div style="margin-top:16px; padding:14px; border:1px solid #ddd; border-radius:10px; background:#f9f9f9;">';
+        html += '<h4 style="margin:0 0 10px; color:#333;">対話による絞り込み</h4>';
+
+        // 進捗インジケーター
+        if (actionType !== 'execute') {
+          html += `<div style="margin-bottom:12px; padding:8px 12px; background:#e8f4fd; border-radius:6px; font-size:14px; color:#1a5276;">
+            残り候補: <b>${remaining}件</b>　 質問回数: <b>${history.length}回</b>
+          </div>`;
+        }
+
+        // --- execute: 確定 ---
+        if (actionType === 'execute') {
+          const cand   = topk[0] || {};
+          const imgUrl = cand.photo_web_path || payload.photo_web_path || '';
+          const name   = cand.photo_file || payload.selected_file || '(不明)';
+          html += `<div style="background:#d4edda; padding:16px; border-radius:8px; text-align:center;">
+            <p style="margin:0; font-size:18px; font-weight:bold; color:#155724;">物体が確定しました</p>
+            ${imgUrl ? `<img src="${imgUrl}" style="display:block; margin:12px auto; width:100%; max-width:260px; height:160px; object-fit:contain; background:#fff; border-radius:8px;">` : ''}
+            <p style="margin:6px 0 0; color:#155724; font-size:14px;">${escapeHtml(name)}</p>
+          </div>`;
+          html += `<div style="margin-top:12px; display:flex; gap:10px; justify-content:center; flex-wrap:wrap;">
+            <button type="button" style="min-width:160px; min-height:56px; font-size:16px; font-weight:bold; background:#28a745; color:#fff; border:none; border-radius:10px;" onclick="handleVlmAnswer('confirm')">確定</button>
+            <button type="button" style="min-width:130px; min-height:56px; font-size:16px; font-weight:bold; background:#6c757d; color:#fff; border:none; border-radius:10px;" onclick="handleVlmAnswer('back')">戻る</button>
+            <button type="button" style="min-width:180px; min-height:56px; font-size:16px; font-weight:bold; background:#ff9800; color:#fff; border:none; border-radius:10px;" onclick="handleVlmAnswer('resketch')">もう一度スケッチ</button>
+          </div>`;
+
+        // --- resketch: 候補なし ---
+        } else if (actionType === 'resketch') {
+          html += `<div style="background:#f8d7da; padding:16px; border-radius:8px; text-align:center;">
+            <p style="margin:0; font-size:16px; font-weight:bold; color:#721c24;">候補がなくなりました</p>
+            <p style="margin:8px 0 0; color:#721c24; font-size:14px;">${escapeHtml(question || 'もう一度スケッチを描いてください。')}</p>
+          </div>`;
+          html += `<div style="margin-top:12px; display:flex; justify-content:center;">
+            <button type="button" style="min-width:200px; min-height:56px; font-size:16px; font-weight:bold; background:#ff9800; color:#fff; border:none; border-radius:10px;" onclick="handleVlmAnswer('resketch')">もう一度スケッチ</button>
+          </div>`;
+
+        // --- ask_user: 質問 ---
+        } else if (actionType === 'ask_user') {
+          // 質問テキスト
+          html += `<div style="background:#fff3cd; padding:14px; border-radius:8px; margin-bottom:14px;">
+            <p style="margin:0; font-size:13px; font-weight:bold; color:#856404;">ロボットからの質問:</p>
+            <p style="margin:8px 0 0; font-size:17px; color:#5c3d00;">${escapeHtml(question)}</p>
+          </div>`;
+
+          // 候補カードグリッド（全モードで選択ボタン付き）
+          if (topk.length > 0) {
+            const cardHtml = topk.map((item, idx) => {
+              const name  = item.photo_file || item.gallery_file || `候補${idx + 1}`;
+              const img   = item.photo_web_path || '';
+              const chooseAction = `handleVlmAnswer('choose:${idx + 1}')`;
+              const imgTag = img
+                ? `<img src="${img}" alt="${escapeHtml(name)}" style="width:100%; height:88px; object-fit:contain; background:#fafafa; border-radius:6px;">`
+                : `<div style="height:88px; background:#f0f0f0; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:11px; color:#999;">画像なし</div>`;
+              // yes_no はサブアクション（小さめ）、multi_choice はメインアクション（大きめ）
+              const btnStyle = questionMode === 'yes_no'
+                ? `margin-top:6px; width:100%; min-height:30px; font-size:12px; background:#fff; color:#1976d2; border:1px solid #1976d2; border-radius:6px; cursor:pointer;`
+                : `margin-top:8px; width:100%; min-height:36px; font-size:13px; font-weight:bold; background:#1976d2; color:#fff; border:none; border-radius:6px;`;
+              const selectBtn = `<button type="button" onclick="event.stopPropagation(); ${chooseAction}" style="${btnStyle}">選ぶ</button>`;
+              return `<div style="border:1px solid #e0e0e0; border-radius:8px; padding:8px; background:#fff; cursor:pointer;" onclick="${chooseAction}">
+                ${imgTag}
+                <div style="margin-top:6px; font-size:11px; color:#666; text-align:center; word-break:break-all;">${escapeHtml(name)}</div>
+                ${selectBtn}
+              </div>`;
+            }).join('');
+            html += `<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(100px, 1fr)); gap:8px; margin-bottom:16px;">${cardHtml}</div>`;
           }
 
-          resultsEl.innerHTML = topk.map(item => {
-            const rank = item.rank ?? '-';
-            const score = typeof item.score === 'number' ? item.score.toFixed(4) : item.score;
-            const name = item.photo_file || item.gallery_file || '(no-name)';
-            const img = item.photo_web_path || '';
-            const imgHtml = img
-            ? `<img class="sbir-photo-img" src="${img}" alt="rank ${rank}: ${name}">`
-            : '<div class="sbir-photo-missing">画像なし</div>';
-            return `
-            <div class="sbir-card" data-rank="${rank}" id="sbir-card-${rank}">
-              <div class="sbir-rank">#${rank}</div>
-              ${imgHtml}
-              <div class="sbir-meta">${name}</div>
-              <div class="sbir-meta">score: ${score}</div>
+          // アクションボタン
+          if (questionMode === 'yes_no') {
+            html += `<div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">
+              <button type="button" style="min-width:120px; min-height:64px; font-size:22px; font-weight:bold; background:#28a745; color:#fff; border:none; border-radius:12px;" onclick="handleVlmAnswer('yes')">YES</button>
+              <button type="button" style="min-width:120px; min-height:64px; font-size:22px; font-weight:bold; background:#dc3545; color:#fff; border:none; border-radius:12px;" onclick="handleVlmAnswer('no')">NO</button>
+              <button type="button" style="min-width:180px; min-height:64px; font-size:15px; font-weight:bold; background:#ff9800; color:#fff; border:none; border-radius:12px;" onclick="handleVlmAnswer('resketch')">もう一度スケッチ</button>
+            </div>`;
+          } else {
+            html += `<div style="display:flex; justify-content:center; margin-top:4px;">
+              <button type="button" style="min-width:200px; min-height:56px; font-size:16px; font-weight:bold; background:#ff9800; color:#fff; border:none; border-radius:10px;" onclick="handleVlmAnswer('resketch')">もう一度スケッチ</button>
+            </div>`;
+          }
+        }
+
+        // 質問履歴
+        if (history.length > 0) {
+          const histHtml = history.map((h, i) => {
+            const ansLabel = h.answer === 'yes' ? '✓ YES' : '✗ NO';
+            const ansColor = h.answer === 'yes' ? '#28a745' : '#dc3545';
+            return `<div style="display:flex; gap:8px; align-items:baseline; font-size:13px; padding:5px 0; border-bottom:1px solid #eee;">
+              <span style="color:#999; min-width:22px;">${i + 1}.</span>
+              <span style="flex:1; color:#444;">${escapeHtml(h.question)}</span>
+              <span style="font-weight:bold; color:${ansColor}; white-space:nowrap;">${ansLabel}</span>
+              <span style="color:#999; font-size:11px; white-space:nowrap;">残${h.remaining_count}件</span>
+            </div>`;
+          }).join('');
+          html += `<details style="margin-top:14px;">
+            <summary style="cursor:pointer; font-size:13px; color:#666; font-weight:bold;">質問履歴 (${history.length}回)</summary>
+            <div style="margin-top:8px;">${histHtml}</div>
+          </details>`;
+        }
+
+        html += '<div id="vlm-user-answer" style="margin-top:8px; font-size:13px; color:#555;"></div>';
+        html += '</div>';
+        container.innerHTML = html;
+      }
+
+      // ---------------------------------------------------------------
+      // 旧フォーマット用: VLM決定パネル（後方互換）
+      // ---------------------------------------------------------------
+      function renderVlmDecision(decision, container) {
+        if (!decision) return;
+
+        const actionType        = decision.action_type || 'unknown';
+        const questionMode      = decision.question_mode || null;
+        const reasoning         = decision.reasoning || '';
+        const extractedFeatures = decision.extracted_features || '';
+        const selectedId        = decision.selected_id;
+        const question          = decision.robot_question || '';
+        const remainingCandidates = Array.isArray(decision.remaining_candidates) ? decision.remaining_candidates : [];
+        const binaryMapping     = decision.binary_mapping || null;
+        const topk              = Array.isArray(lastSbirPayload && lastSbirPayload.topk) ? lastSbirPayload.topk : [];
+
+        clearCandidateHighlights();
+
+        let html = '<div style="margin-top:15px; padding:10px; border:1px solid #ddd; border-radius:5px; background:#f9f9f9;">';
+        html += '<h4 style="margin-top:0; color:#333;">VLM逆質問分析</h4>';
+
+        if (extractedFeatures) {
+          html += `<details style="margin:8px 0 10px;"><summary style="cursor:pointer; font-weight:bold; color:#444;">抽出された特徴</summary><div style="margin-top:6px; color:#444;">${escapeHtml(extractedFeatures)}</div></details>`;
+        }
+
+        if (actionType === 'execute' && selectedId != null) {
+          highlightCandidateCard(selectedId);
+          const ti    = topk.find(v => Number(v.rank) === Number(selectedId)) || {};
+          const imgUrl = ti.photo_web_path || '';
+          const imgName = ti.photo_file || `候補#${selectedId}`;
+          html += `<div style="background:#d4edda; padding:12px; border-radius:8px; margin:10px 0; text-align:center;">
+            <p style="margin:0; color:#155724;"><b>決定: 候補#${selectedId}</b></p>
+            <p style="margin:5px 0 0; color:#155724; font-size:12px;">${escapeHtml(reasoning)}</p>
+            ${imgUrl ? `<img src="${imgUrl}" style="width:100%; max-width:300px; height:92px; object-fit:contain; background:#fafafa; border-radius:8px; margin:12px auto; display:block;">` : ''}
+            <button type="button" style="margin-top:12px; min-width:160px; min-height:56px; font-size:16px; font-weight:bold; background:#28a745; color:#fff; border:none; border-radius:10px;" onclick="handleVlmAnswer('confirm')">確定</button>
+          </div>
+          <div style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap; justify-content:center;">
+            <button type="button" style="min-width:190px; min-height:56px; font-size:16px; font-weight:bold; background:#6c757d; color:#fff; border:none; border-radius:10px;" onclick="handleVlmAnswer('neither')">どれでもない</button>
+            <button type="button" style="min-width:170px; min-height:56px; font-size:16px; font-weight:bold; background:#ff9800; color:#fff; border:none; border-radius:10px;" onclick="handleVlmAnswer('resketch')">もう一度スケッチ</button>
+          </div>`;
+        } else if (actionType === 'resketch') {
+          html += `<div style="background:#f8d7da; padding:8px; border-radius:4px; margin:8px 0;">
+            <p style="margin:0; color:#721c24;"><b>再スケッチ推奨</b></p>
+            <p style="margin:5px 0 0; color:#721c24; font-size:13px;">${escapeHtml(question || 'もう一度スケッチを描いてください。')}</p>
+            <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">
+              <button type="button" onclick="handleVlmAnswer('neither')">どれでもない</button>
+              <button type="button" onclick="handleVlmAnswer('resketch')">もう一度スケッチ</button>
             </div>
-            `;
-          }).join('');
-
-          // Render VLM decision if available
-          if (payload.vlm_decision && vlmEl) {
-            renderVlmDecision(payload.vlm_decision, vlmEl);
-          } else if (vlmEl) {
-            vlmEl.innerHTML = '';
+          </div>`;
+        } else if (actionType === 'ask_user' && question) {
+          html += `<div style="background:#fff3cd; padding:8px; border-radius:4px; margin:8px 0;">
+            <p style="margin:0; color:#856404;"><b>ユーザーへの質問:</b></p>
+            <p style="margin:5px 0 0; color:#856404; font-size:13px;">${escapeHtml(question)}</p>
+          </div>`;
+          if (remainingCandidates.length > 0) {
+            html += buildCandidateCardGrid(topk, remainingCandidates, questionMode, binaryMapping, selectedId);
           }
-        }
-
-        function renderVlmDecision(decision, container) {
-          if (!decision) return;
-
-          const actionType = decision.action_type || 'unknown';
-          const questionMode = decision.question_mode || null;
-          const reasoning = decision.reasoning || '';
-          const extractedFeatures = decision.extracted_features || '';
-          const selectedId = decision.selected_id;
-          const question = decision.robot_question || '';
-          const remainingCandidates = Array.isArray(decision.remaining_candidates)
-            ? decision.remaining_candidates
-            : [];
-          const binaryMapping = decision.binary_mapping || null;
-          const topk = Array.isArray(lastSbirPayload && lastSbirPayload.topk) ? lastSbirPayload.topk : [];
-
-          clearCandidateHighlights();
-
-          let html = '<div style="margin-top: 15px; padding: 10px; border: 1px solid #ddd; border-radius: 5px; background-color: #f9f9f9;">';
-          html += '<h4 style="margin-top: 0; color: #333;">🤖 VLM逆質問分析</h4>';
-
-          if (extractedFeatures) {
-            html += `<details style="margin: 8px 0 10px 0;">
-              <summary style="cursor: pointer; font-weight: bold; color: #444;">抽出された特徴</summary>
-              <div style="margin-top: 6px; line-height: 1.5; color: #444;">${escapeHtml(extractedFeatures)}</div>
-            </details>`;
-          }
-
-          if (actionType === 'execute' && selectedId !== undefined && selectedId !== null) {
-            highlightCandidateCard(selectedId);
-            const topkItem = topk.find(v => Number(v.rank) === Number(selectedId)) || {};
-            const imgUrl = topkItem.photo_web_path || '';
-            const imgName = topkItem.photo_file || topkItem.gallery_file || `(候補#${selectedId})`;
-            const imgHtml = imgUrl
-              ? `<img src="${imgUrl}" alt="確定候補#${selectedId}: ${escapeHtml(imgName)}" style="width:100%; max-width:300px; height:92px; object-fit:contain; background:#fafafa; border-radius:8px; margin: 12px auto; display:block;">`
-              : '';
-            html += `<div style="background-color: #d4edda; padding: 12px; border-radius: 8px; margin: 10px 0; text-align:center;">
-              <p style="margin: 0; color: #155724;"><b>✓ 決定:</b> 候補#${selectedId}を推奨</p>
-              <p style="margin: 5px 0 0 0; color: #155724; font-size: 12px;">${escapeHtml(reasoning)}</p>
-              ${imgHtml}
-              <button type="button" style="margin-top: 12px; min-width: 160px; min-height: 56px; font-size: 16px; font-weight: bold; background: #28a745; color: white; border: none; border-radius: 10px;" onclick="handleVlmAnswer('confirm')">確定</button>
-            </div>`;
-            html += `<div style="margin-top: 10px; display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;">
-              <button type="button" style="min-width: 190px; min-height: 56px; font-size: 16px; font-weight: bold; background: #6c757d; color: white; border: none; border-radius: 10px;" onclick="handleVlmAnswer('neither')">どれでもない</button>
-              <button type="button" style="min-width: 170px; min-height: 56px; font-size: 16px; font-weight: bold; background: #ff9800; color: white; border: none; border-radius: 10px;" onclick="handleVlmAnswer('resketch')">もう一度スケッチ</button>
-            </div>`;
-            html += '<div id="vlm-user-answer" style="margin-top:8px; font-size:13px; color:#333;"></div>';
-          } else if (actionType === 'resketch') {
-            html += `<div style="background-color: #f8d7da; padding: 8px; border-radius: 4px; margin: 8px 0;">
-              <p style="margin: 0; color: #721c24;"><b>↺ 再スケッチ推奨:</b> Top5に正解が無い可能性があります。</p>
-              <p style="margin: 5px 0 0 0; color: #721c24; font-size: 13px;">${escapeHtml(question || 'もう一度スケッチを描いてください。')}</p>
-              <div style="margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap;">
-                <button type="button" onclick="handleVlmAnswer('neither')">どれでもない（次のTop5を探す）</button>
-                <button type="button" onclick="handleVlmAnswer('resketch')">もう一度スケッチ</button>
-              </div>
-            </div>`;
-            html += '<div id="vlm-user-answer" style="margin-top:8px; font-size:13px; color:#333;"></div>';
-          } else if (actionType === 'ask_user' && question) {
-            html += `<div style="background-color: #fff3cd; padding: 8px; border-radius: 4px; margin: 8px 0;">
-              <p style="margin: 0; color: #856404;"><b>❓ ユーザーへの質問:</b></p>
-              <p style="margin: 5px 0 0 0; color: #856404; font-size: 13px;">${escapeHtml(question)}</p>
-            </div>`;
-
-            if (remainingCandidates.length > 0) {
-              html += buildCandidateCardGrid(topk, remainingCandidates, questionMode, binaryMapping, selectedId);
-            }
-
-            if (questionMode === 'yes_no' && binaryMapping) {
-              html += `<div style="margin-top: 10px; display: flex; gap: 10px; flex-wrap: wrap; align-items: stretch;">
-                <button type="button" style="min-width: 190px; min-height: 56px; font-size: 16px; font-weight: bold; background: #6c757d; color: white; border: none; border-radius: 10px;" onclick="handleVlmAnswer('neither')">どれでもない</button>
-                <button type="button" style="min-width: 170px; min-height: 56px; font-size: 16px; font-weight: bold; background: #ff9800; color: white; border: none; border-radius: 10px;" onclick="handleVlmAnswer('resketch')">もう一度スケッチ</button>
-              </div>`;
-              html += `<p style="margin-top: 6px; font-size: 12px; color: #666;">YES→候補#${binaryMapping.yes_candidate_id} / NO→候補#${binaryMapping.no_candidate_id}</p>`;
-            } else {
-              html += `<div style="margin-top: 10px; display: flex; gap: 10px; flex-wrap: wrap;">
-                <button type="button" style="min-width: 160px; min-height: 56px; font-size: 16px; font-weight: bold; background: #6c757d; color: white; border: none; border-radius: 10px;" onclick="handleVlmAnswer('neither')">どれでもない</button>
-                <button type="button" style="min-width: 160px; min-height: 56px; font-size: 16px; font-weight: bold; background: #ff9800; color: white; border: none; border-radius: 10px;" onclick="handleVlmAnswer('resketch')">もう一度スケッチ</button>
-              </div>`;
-              html += `<div style="margin-top: 8px; font-size: 12px; color: #666;">カードを押して候補を選択できます。</div>`;
-            }
-
-            html += '<div id="vlm-user-answer" style="margin-top:8px; font-size:13px; color:#333;"></div>';
+          if (questionMode === 'yes_no' && binaryMapping) {
+            html += `<div style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap; align-items:stretch;">
+              <button type="button" style="min-width:190px; min-height:56px; font-size:16px; font-weight:bold; background:#6c757d; color:#fff; border:none; border-radius:10px;" onclick="handleVlmAnswer('neither')">どれでもない</button>
+              <button type="button" style="min-width:170px; min-height:56px; font-size:16px; font-weight:bold; background:#ff9800; color:#fff; border:none; border-radius:10px;" onclick="handleVlmAnswer('resketch')">もう一度スケッチ</button>
+            </div>
+            <p style="margin-top:6px; font-size:12px; color:#666;">YES→候補#${binaryMapping.yes_candidate_id} / NO→候補#${binaryMapping.no_candidate_id}</p>`;
           } else {
-            html += `<p style="color: #999;"><i>VLM処理が実行されましたが、決定結果が利用できません。</i></p>`;
+            html += `<div style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap;">
+              <button type="button" style="min-width:160px; min-height:56px; font-size:16px; font-weight:bold; background:#6c757d; color:#fff; border:none; border-radius:10px;" onclick="handleVlmAnswer('neither')">どれでもない</button>
+              <button type="button" style="min-width:160px; min-height:56px; font-size:16px; font-weight:bold; background:#ff9800; color:#fff; border:none; border-radius:10px;" onclick="handleVlmAnswer('resketch')">もう一度スケッチ</button>
+            </div>
+            <div style="margin-top:8px; font-size:12px; color:#666;">カードを押して候補を選択できます。</div>`;
           }
-
-          html += '</div>';
-          container.innerHTML = html;
+        } else {
+          html += `<p style="color:#999;"><i>VLM処理が実行されましたが結果がありません。</i></p>`;
         }
 
-        function clearCandidateHighlights() {
-          document.querySelectorAll('.sbir-card').forEach(card => {
-            card.style.outline = '';
-            card.style.boxShadow = '';
-          });
-        }
+        html += '<div id="vlm-user-answer" style="margin-top:8px; font-size:13px; color:#333;"></div></div>';
+        container.innerHTML = html;
+      }
 
-        function highlightCandidateCard(rank) {
-          const card = document.getElementById(`sbir-card-${rank}`);
-          if (!card) return;
-          card.style.outline = '3px solid #28a745';
-          card.style.boxShadow = '0 0 0 2px rgba(40, 167, 69, 0.2)';
-        }
+      // ---------------------------------------------------------------
+      // ユーティリティ
+      // ---------------------------------------------------------------
+      function clearCandidateHighlights() {
+        document.querySelectorAll('.sbir-card').forEach(card => {
+          card.style.outline = '';
+          card.style.boxShadow = '';
+        });
+      }
 
-        function buildCandidateCardGrid(topk, remainingCandidates, questionMode, binaryMapping, selectedId) {
-          const items = remainingCandidates.map(rank => {
-            const item = topk.find(v => Number(v.rank) === Number(rank)) || {};
-            return {
-              rank: Number(rank),
-              score: item.score,
-              name: item.photo_file || item.gallery_file || `(候補#${rank})`,
-              img: item.photo_web_path || '',
-            };
-          });
+      function highlightCandidateCard(rank) {
+        const card = document.getElementById(`sbir-card-${rank}`);
+        if (!card) return;
+        card.style.outline = '3px solid #28a745';
+        card.style.boxShadow = '0 0 0 2px rgba(40,167,69,0.2)';
+      }
 
-          const cardHtml = items.map(item => {
-            const isSelected = Number(selectedId) === Number(item.rank);
-            const label = questionMode === 'yes_no' && binaryMapping
-              ? (Number(item.rank) === Number(binaryMapping.yes_candidate_id) ? 'YES候補' : 'NO候補')
-              : `候補#${item.rank}`;
-            const action = questionMode === 'yes_no'
-              ? (Number(item.rank) === Number(binaryMapping.yes_candidate_id) ? "handleVlmAnswer('yes')" : "handleVlmAnswer('no')")
-              : `handleVlmAnswer('choose:${item.rank}')`;
-            const scoreText = typeof item.score === 'number' ? item.score.toFixed(4) : (item.score || '-');
-            const selectedBadge = isSelected
-              ? '<div style="margin-top:6px; display:inline-block; padding:2px 8px; border-radius:999px; background:#28a745; color:#fff; font-size:12px; font-weight:bold;">選択中</div>'
-              : '';
-            const borderColor = isSelected ? '#28a745' : '#ddd';
-            const boxShadow = isSelected ? '0 0 0 3px rgba(40,167,69,0.18)' : 'none';
-            const imgHtml = item.img
-              ? `<img class="sbir-photo-img" src="${item.img}" alt="候補#${item.rank}: ${escapeHtml(item.name)}" style="width:100%; height:92px; object-fit:contain; background:#fafafa; border-radius:8px;">`
-              : `<div class="sbir-photo-missing" style="height:92px; display:flex; align-items:center; justify-content:center; background:#f3f3f3; border-radius:8px;">画像なし</div>`;
-            const cardClick = action ? `onclick="${action}"` : '';
-            const cardCursor = action ? 'pointer' : 'default';
-            const actionButtonLabel = questionMode === 'yes_no'
-              ? (Number(item.rank) === Number(binaryMapping.yes_candidate_id) ? 'YES' : 'NO')
-              : 'この候補を選ぶ';
-            const actionButtonColor = questionMode === 'yes_no'
-              ? (Number(item.rank) === Number(binaryMapping.yes_candidate_id) ? '#28a745' : '#dc3545')
-              : '#1976d2';
+      function buildCandidateCardGrid(topk, remainingCandidates, questionMode, binaryMapping, selectedId) {
+        const items = remainingCandidates.map(rank => {
+          const item = topk.find(v => Number(v.rank) === Number(rank)) || {};
+          return { rank: Number(rank), score: item.score, name: item.photo_file || item.gallery_file || `(候補#${rank})`, img: item.photo_web_path || '' };
+        });
+        const cardHtml = items.map(item => {
+          const isSelected    = Number(selectedId) === Number(item.rank);
+          const label         = questionMode === 'yes_no' && binaryMapping
+            ? (Number(item.rank) === Number(binaryMapping.yes_candidate_id) ? 'YES候補' : 'NO候補')
+            : `候補#${item.rank}`;
+          const action        = questionMode === 'yes_no'
+            ? (Number(item.rank) === Number(binaryMapping.yes_candidate_id) ? "handleVlmAnswer('yes')" : "handleVlmAnswer('no')")
+            : `handleVlmAnswer('choose:${item.rank}')`;
+          const scoreText     = typeof item.score === 'number' ? item.score.toFixed(4) : (item.score || '-');
+          const borderColor   = isSelected ? '#28a745' : '#ddd';
+          const btnColor      = questionMode === 'yes_no'
+            ? (Number(item.rank) === Number(binaryMapping.yes_candidate_id) ? '#28a745' : '#dc3545')
+            : '#1976d2';
+          const btnLabel      = questionMode === 'yes_no'
+            ? (Number(item.rank) === Number(binaryMapping.yes_candidate_id) ? 'YES' : 'NO')
+            : 'この候補を選ぶ';
+          const imgHtml       = item.img
+            ? `<img class="sbir-photo-img" src="${item.img}" style="width:100%; height:92px; object-fit:contain; background:#fafafa; border-radius:8px;">`
+            : `<div class="sbir-photo-missing" style="height:92px;">画像なし</div>`;
+          return `<div class="vlm-candidate-card" style="border:2px solid ${borderColor}; border-radius:12px; padding:10px; background:#fff; cursor:pointer;" onclick="${action}">
+            ${imgHtml}
+            <div style="margin-top:8px; font-weight:bold; font-size:15px; color:#333;">${label}</div>
+            <div style="margin-top:4px; font-size:12px; color:#666;">score: ${scoreText}</div>
+            <button type="button" style="margin-top:10px; width:100%; min-height:44px; font-size:15px; font-weight:bold; background:${btnColor}; color:#fff; border:none; border-radius:8px;" onclick="event.stopPropagation(); ${action}">${btnLabel}</button>
+          </div>`;
+        }).join('');
+        return `<div style="margin-top:10px; display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:12px;">${cardHtml}</div>`;
+      }
 
-            return `
-              <div class="vlm-candidate-card" style="border:2px solid ${borderColor}; box-shadow:${boxShadow}; border-radius:12px; padding:10px; background:#fff; cursor:${cardCursor};" ${cardClick}>
-                ${imgHtml}
-                <div style="margin-top:8px; font-weight:bold; font-size:15px; color:#333;">${label}</div>
-                <div style="margin-top:4px; font-size:12px; color:#666;">score: ${scoreText}</div>
-                ${selectedBadge}
-                <button type="button" style="margin-top:10px; width:100%; min-height:44px; font-size:15px; font-weight:bold; background:${actionButtonColor}; color:#fff; border:none; border-radius:8px;" onclick="event.stopPropagation(); ${action}">${actionButtonLabel}</button>
-              </div>`;
-          }).join('');
+      function publishVlmFeedback(answer) {
+        if (!vlmFeedbackTopic || !lastSbirPayload) return;
+        const msg = new ROSLIB.Message({ data: JSON.stringify({
+          sketch_file: lastSbirPayload.sketch_file || null,
+          answer,
+          timestamp: Date.now(),
+        })});
+        vlmFeedbackTopic.publish(msg);
+      }
 
-          return `
-            <div style="margin-top:10px; display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap:12px;">
-              ${cardHtml}
-            </div>`;
-        }
+      function handleVlmAnswer(answer) {
+        if (!lastSbirPayload) return;
 
-        function publishVlmFeedback(answer, selectedId = null) {
-          if (!vlmFeedbackTopic || !lastSbirPayload) return;
-          const feedbackPayload = {
-            sketch_file: lastSbirPayload.sketch_file || null,
-            answer,
-            selected_id: selectedId,
-            timestamp: Date.now(),
-          };
-          const msg = new ROSLIB.Message({ data: JSON.stringify(feedbackPayload) });
-          vlmFeedbackTopic.publish(msg);
-        }
+        // 送信
+        publishVlmFeedback(answer);
 
-        function handleVlmAnswer(answer) {
-          const panel = document.getElementById('vlm-user-answer');
-          const decision = (lastSbirPayload && lastSbirPayload.vlm_decision) || null;
-          if (!panel || !decision) return;
+        // UI フィードバックメッセージ
+        const panel = document.getElementById('vlm-user-answer');
+        if (!panel) return;
+        const messages = {
+          'yes':     'YES を送信しました。次の質問を待ちます...',
+          'no':      'NO を送信しました。次の質問を待ちます...',
+          'confirm': '確定しました。',
+          'back':    '戻ります...',
+          'resketch': 'もう一度スケッチを描いてください。',
+          'neither': 'どれでもないを送信しました。',
+        };
+        panel.textContent = messages[answer]
+          || (answer.startsWith('choose:') ? `候補${answer.split(':')[1]}を選択しました。次の質問を待ちます...` : '回答を送信しました。');
+      }
 
-          const mapping = decision.binary_mapping || {};
-          let selected = null;
-          let message = '';
-
-          if (answer === 'confirm') {
-            selected = decision.selected_id || null;
-            if (selected) {
-              highlightCandidateCard(selected);
-              message = `確定: 候補#${selected}に決定しました。`;
-            } else {
-              message = '確定を受け取りました。';
-            }
-          } else if (answer === 'yes') {
-            selected = mapping.yes_candidate_id || null;
-            if (selected) {
-              highlightCandidateCard(selected);
-              message = `YESを選択: 候補#${selected}を採用します。`;
-            } else {
-              message = 'YESを受け取りました。';
-            }
-          } else if (answer === 'no') {
-            selected = mapping.no_candidate_id || null;
-            if (selected) {
-              highlightCandidateCard(selected);
-              message = `NOを選択: 候補#${selected}を採用します。`;
-            } else {
-              message = 'NOを受け取りました。';
-            }
-          } else if (answer.startsWith('choose:')) {
-            selected = parseInt(answer.split(':')[1], 10);
-            if (!Number.isNaN(selected)) {
-              highlightCandidateCard(selected);
-              message = `候補#${selected}を選択しました。`;
-            } else {
-              message = '候補選択を受け取りました。';
-            }
-          } else if (answer === 'neither') {
-            clearCandidateHighlights();
-            message = 'どれでもないを選択: 現在のTop5を一時除外して、新しいTop5を再検索します。';
-          } else if (answer === 'resketch') {
-            clearCandidateHighlights();
-            message = '再スケッチを選択: キャンバスをクリアして描き直してください。';
-          } else {
-            message = '回答を受け取りました。';
-          }
-
-          panel.textContent = message;
-          publishVlmFeedback(answer, selected);
-        }
-
-        function escapeHtml(text) {
-          const div = document.createElement('div');
-          div.textContent = text;
-          return div.innerHTML;
-        }
+      function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = String(text || '');
+        return div.innerHTML;
+      }
 
       function callbackAudioBlob(blob) {
           //console.log('callback');
