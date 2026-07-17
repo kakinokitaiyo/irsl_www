@@ -1,0 +1,93 @@
+{
+  "sketch_file": "writing_23.png",
+  "action_type": "ask_user",
+  "question_mode": "multi_choice",
+  "robot_question": "最も近い候補を選んでください。",
+  "user_options": [
+    "select_candidate",
+    "resketch"
+  ],
+  "remaining_count": 30,
+  "topk": [
+    {
+      "rank": 1,
+      "gallery_id": 304,
+      "gallery_file": "pet01_edge.png",
+      "photo_id": 305,
+      "photo_file": "pet01.jpeg",
+      "photo_source_path": "/home/irsl/workspace/CLIP_DB/photos/pet01.jpeg",
+      "score": 0.9651293754577637,
+      "score_sketchscape": 0.6621277928352356,
+      "score_clip_text": null,
+      "score_sketchscape_norm": 1.0,
+      "score_clip_text_norm": null,
+      "score_dinov2": 0.2885805368423462,
+      "score_dinov2_norm": 0.9302586913108826,
+      "photo_web_path": "/touch/sbir_photos/r1_pet01.jpeg"
+    },
+    {
+      "rank": 2,
+      "gallery_id": 262,
+      "gallery_file": "IMG_2789_edge.png",
+      "photo_id": 263,
+      "photo_file": "IMG_2789.JPG",
+      "photo_source_path": "/home/irsl/workspace/CLIP_DB/photos/IMG_2789.JPG",
+      "score": 0.9280513525009155,
+      "score_sketchscape": 0.649780809879303,
+      "score_clip_text": null,
+      "score_sketchscape_norm": 0.9675089716911316,
+      "score_clip_text_norm": null,
+      "score_dinov2": 0.2732967436313629,
+      "score_dinov2_norm": 0.8885937929153442
+    },
+    {
+      "rank": 3,
+      "gallery_id": 305,
+      "gallery_file": "pet02_edge.png",
+      "photo_id": 306,
+      "photo_file": "pet02.jpeg",
+      "photo_source_path": "/home/irsl/workspace/CLIP_DB/photos/pet02.jpeg",
+      "score": 0.9198440313339233,
+      "score_sketchscape": 0.6012073159217834,
+      "score_clip_text": null,
+      "score_sketchscape_norm": 0.8396880030632019,
+      "score_clip_text_norm": null,
+      "score_dinov2": 0.314163476228714,
+      "score_dinov2_norm": 1.0,
+      "photo_web_path": "/touch/sbir_photos/r3_pet02.jpeg"
+    },
+    {
+      "rank": 4,
+      "gallery_id": 272,
+      "gallery_file": "IMG_2801_edge.png",
+      "photo_id": 273,
+      "photo_file": "IMG_2801.JPG",
+      "photo_source_path": "/home/irsl/workspace/CLIP_DB/photos/IMG_2801.JPG",
+      "score": 0.6631301641464233,
+      "score_sketchscape": 0.5473140478134155,
+      "score_clip_text": null,
+      "score_sketchscape_norm": 0.6978681087493896,
+      "score_clip_text_norm": null,
+      "score_dinov2": 0.1778479665517807,
+      "score_dinov2_norm": 0.6283921599388123
+    },
+    {
+      "rank": 5,
+      "gallery_id": 261,
+      "gallery_file": "IMG_2788_edge.png",
+      "photo_id": 262,
+      "photo_file": "IMG_2788.JPG",
+      "photo_source_path": "/home/irsl/workspace/CLIP_DB/photos/IMG_2788.JPG",
+      "score": 0.6242802143096924,
+      "score_sketchscape": 0.5737023949623108,
+      "score_clip_text": null,
+      "score_sketchscape_norm": 0.7673089504241943,
+      "score_clip_text_norm": null,
+      "score_dinov2": 0.12387289851903915,
+      "score_dinov2_norm": 0.48125147819519043
+    }
+  ],
+  "sketch_web_path": "/touch/sbir_sketches/writing_23.png",
+  "question_history": [],
+  "vlm_error": "Image not found: /home/irsl/workspace/CLIP_DB/photos/IMG_2789.JPG"
+}
