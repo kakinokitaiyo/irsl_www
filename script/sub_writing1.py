@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 
+import csv
 import json
 import os
 import shutil
 import subprocess
 import sys
+from datetime import datetime
 import rospy
 from std_msgs.msg import String
 from base64 import b64decode
@@ -34,6 +36,27 @@ clip_query_by_sketch = {}
 DIALOGUE_INITIAL_TOPK = int(os.getenv("SBIR_DIALOGUE_TOPK", "30"))
 # 1ターンで VLM に渡す候補の最大枚数（全残り候補をこの枚数以内で一括分類）
 DIALOGUE_VLM_MAX_CANDIDATES = int(os.getenv("SBIR_VLM_MAX_CANDIDATES", "20"))
+
+# ---------------------------------------------------------------------------
+# 実験ログ
+# ---------------------------------------------------------------------------
+
+_LOG_PATH = os.path.join(os.path.dirname(__file__), '..', 'experiment_log.csv')
+_LOG_FIELDS = [
+    'timestamp', 'sketch_file',
+    'sbir_top1_file', 'sbir_top1_score', 'sbir_top1_sketchscape',
+    'dialogue_turns', 'outcome', 'confirmed_file', 'confirmed_rank',
+    'target_object', 'quality_level', 'score_formula',
+]
+
+
+def _log_experiment(row: dict) -> None:
+    exists = os.path.isfile(_LOG_PATH)
+    with open(_LOG_PATH, 'a', newline='', encoding='utf-8') as f:
+        writer = csv.DictWriter(f, fieldnames=_LOG_FIELDS)
+        if not exists:
+            writer.writeheader()
+        writer.writerow({k: row.get(k, '') for k in _LOG_FIELDS})
 
 
 # ---------------------------------------------------------------------------
@@ -148,7 +171,8 @@ def run_sbir_once(sketch_path: str, topk: int | None = None,
     if os.getenv("ENABLE_DINOV2_FUSION", "false").lower() == "true":
         cmd.extend([
             "--enable_dinov2_fusion",
-            "--dinov2_weight", os.getenv("SBIR_DINO_WEIGHT", "0.3"),
+            "--scape_weight",  os.getenv("SBIR_SCAPE_WEIGHT", "0.7"),
+            "--dinov2_weight", os.getenv("SBIR_DINO_WEIGHT",  "0.3"),
         ])
         dinov2_npz = os.getenv("DINO_IMAGE_EMBEDDINGS_PATH", "")
         if dinov2_npz:
@@ -171,6 +195,10 @@ def run_sbir_once(sketch_path: str, topk: int | None = None,
 # ---------------------------------------------------------------------------
 
 def _save_and_publish(sketch_file: str, payload: dict) -> None:
+    state = dialogue_state_by_sketch.get(sketch_file, {})
+    if "score_formula" in state:
+        payload["_score_formula"] = state["score_formula"]
+
     latest_result_by_sketch[sketch_file] = payload
 
     result_dir = os.path.join(os.path.dirname(__file__), '..', 'sketch_result')
@@ -188,24 +216,51 @@ def _save_and_publish(sketch_file: str, payload: dict) -> None:
 
 def _publish_confirmed(sketch_file: str, candidate: dict) -> None:
     state = dialogue_state_by_sketch.get(sketch_file, {})
-    _copy_candidates_for_web([candidate])
+
+    # 確定物を先頭にした Top-5 を構成（touch.html は topk[0] を確定物として扱う）
+    all_top5 = state.get("all_candidates", [])[:5]
+    _copy_candidates_for_web(all_top5)
+    confirmed_id = candidate.get("photo_id")
+    for item in all_top5:
+        item["confirmed"] = (item.get("photo_id") == confirmed_id)
+    confirmed_items = [c for c in all_top5 if c.get("photo_id") == confirmed_id]
+    other_items     = [c for c in all_top5 if c.get("photo_id") != confirmed_id]
+    topk_ordered    = confirmed_items + other_items if confirmed_items else [candidate] + other_items
+
+    dialogue_turns = len(state.get("question_history", []))
     payload = {
         "sketch_file": sketch_file,
         "action_type": "execute",
         "selected_id": candidate.get("photo_id"),
         "selected_file": candidate.get("photo_file"),
         "selected_path": candidate.get("photo_source_path"),
-        "photo_web_path": candidate.get("photo_web_path"),
+        "photo_web_path": topk_ordered[0].get("photo_web_path") if topk_ordered else None,
         "question_history": state.get("question_history", []),
-        "topk": [candidate],
+        "topk": topk_ordered,
         "sketch_web_path": state.get("sketch_web_path"),
     }
     _save_and_publish(sketch_file, payload)
     rospy.loginfo("Confirmed: %s for %s", candidate.get("photo_file"), sketch_file)
 
+    _log_experiment({
+        "timestamp":              datetime.now().isoformat(timespec='seconds'),
+        "sketch_file":            sketch_file,
+        "sbir_top1_file":         state.get("sbir_top1_file", ""),
+        "sbir_top1_score":        state.get("sbir_top1_score", ""),
+        "sbir_top1_sketchscape":  state.get("sbir_top1_sketchscape", ""),
+        "dialogue_turns":         dialogue_turns,
+        "outcome":                "confirmed",
+        "confirmed_file":         candidate.get("photo_file", ""),
+        "confirmed_rank":         candidate.get("rank", ""),
+        "target_object":          os.getenv("EXPERIMENT_TARGET", ""),
+        "quality_level":          os.getenv("EXPERIMENT_QUALITY", ""),
+        "score_formula":          state.get("score_formula", ""),
+    })
+
 
 def _publish_resketch_request(sketch_file: str) -> None:
     state = dialogue_state_by_sketch.get(sketch_file, {})
+    dialogue_turns = len(state.get("question_history", []))
     payload = {
         "sketch_file": sketch_file,
         "action_type": "resketch",
@@ -215,6 +270,20 @@ def _publish_resketch_request(sketch_file: str) -> None:
         "sketch_web_path": state.get("sketch_web_path"),
     }
     _save_and_publish(sketch_file, payload)
+
+    _log_experiment({
+        "timestamp":              datetime.now().isoformat(timespec='seconds'),
+        "sketch_file":            sketch_file,
+        "sbir_top1_file":         state.get("sbir_top1_file", ""),
+        "sbir_top1_score":        state.get("sbir_top1_score", ""),
+        "sbir_top1_sketchscape":  state.get("sbir_top1_sketchscape", ""),
+        "dialogue_turns":         dialogue_turns,
+        "outcome":                "resketch",
+        "confirmed_file":         "",
+        "target_object":          os.getenv("EXPERIMENT_TARGET", ""),
+        "quality_level":          os.getenv("EXPERIMENT_QUALITY", ""),
+        "score_formula":          state.get("score_formula", ""),
+    })
 
 
 # ---------------------------------------------------------------------------
@@ -359,6 +428,15 @@ def process_and_publish_sbir(sketch_path: str) -> None:
 
     sketch_web_path = _copy_sketch_for_web(sketch_path)
 
+    top1 = all_candidates[0] if all_candidates else {}
+    fusion_weights = sbir_result.get("fusion_weights") or {}
+    w_scape = fusion_weights.get("scape", 0.7)
+    w_dino  = fusion_weights.get("dinov2", 0.3)
+    score_formula = (
+        f"score = {w_scape} * score_sketchscape_norm"
+        f" + {w_dino} * score_dinov2_norm"
+    )
+
     # 対話状態を初期化
     dialogue_state_by_sketch[sketch_file] = {
         "sketch_path":        sketch_path,
@@ -367,6 +445,10 @@ def process_and_publish_sbir(sketch_path: str) -> None:
         "remaining_candidates": list(all_candidates),
         "current_question":   None,
         "question_history":   [],
+        "sbir_top1_file":        top1.get("gallery_file", ""),
+        "sbir_top1_score":       top1.get("score", ""),
+        "sbir_top1_sketchscape": top1.get("score_sketchscape", ""),
+        "score_formula":         score_formula,
     }
 
     if len(all_candidates) == 0:
