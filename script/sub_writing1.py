@@ -6,7 +6,14 @@ import os
 import shutil
 import subprocess
 import sys
+import threading
 from datetime import datetime
+
+# sbir_engine.py が同じディレクトリにあるため、スクリプトディレクトリを先頭に追加
+_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+if _SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, _SCRIPT_DIR)
+
 import rospy
 from std_msgs.msg import String
 from base64 import b64decode
@@ -121,19 +128,33 @@ def parse_json_from_mixed_output(output: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# SBIR 実行（最初の1回のみ呼ばれる）
+# SBIR 実行（エンジン常駐型）
 # ---------------------------------------------------------------------------
 
-def run_sbir_once(sketch_path: str, topk: int | None = None,
-                  clip_text_query: str | None = None) -> str:
-    clip_db_root = os.getenv("CLIP_DB_ROOT", "/home/irsl/workspace/CLIP_DB")
-    sbir_script = os.path.join(clip_db_root, "src", "run_sbir_once_from_db.py")
+try:
+    from sbir_engine import get_engine
+    _USE_ENGINE = True
+except ImportError:
+    _USE_ENGINE = False
+    rospy.logwarn("sbir_engine not available. Falling back to subprocess.")
 
-    if not os.path.isfile(sbir_script):
-        raise FileNotFoundError(f"SBIR script not found: {sbir_script}")
 
+def run_sbir_once(sketch_path: str, topk: int | None = None) -> dict:
+    """スケッチを検索して結果 dict を返す。エンジン常駐型（高速）。"""
     actual_topk = topk if topk is not None else int(os.getenv("SBIR_TOPK", str(DIALOGUE_INITIAL_TOPK)))
+    scape_weight = float(os.getenv("SBIR_SCAPE_WEIGHT", "0.7"))
+    dino_weight  = float(os.getenv("SBIR_DINO_WEIGHT",  "0.3"))
 
+    if _USE_ENGINE:
+        engine = get_engine()
+        if not engine._loaded:
+            raise RuntimeError("SBIREngine is not loaded yet.")
+        return engine.search(sketch_path, topk=actual_topk,
+                             scape_weight=scape_weight, dino_weight=dino_weight)
+
+    # フォールバック: サブプロセス（エンジン未使用時）
+    clip_db_root = os.getenv("CLIP_DB_ROOT", "/home/irsl/workspace/CLIP_DB")
+    sbir_script  = os.path.join(clip_db_root, "src", "run_sbir_once_from_db.py")
     cmd = [
         sys.executable, sbir_script,
         "--sketch_path", sketch_path,
@@ -144,49 +165,28 @@ def run_sbir_once(sketch_path: str, topk: int | None = None,
         "--user",     os.getenv("PGUSER",     "kakinoki_taiyo"),
         "--password", os.getenv("PGPASSWORD", "irsl"),
         "--schema",   os.getenv("SBIR_SCHEMA", "home_robot"),
-        "--gallery_table",      os.getenv("SBIR_GALLERY_TABLE",      "photos_edge"),
-        "--display_table",      os.getenv("SBIR_DISPLAY_TABLE",      "photos"),
+        "--gallery_table",       os.getenv("SBIR_GALLERY_TABLE",       "photos_edge"),
+        "--display_table",       os.getenv("SBIR_DISPLAY_TABLE",       "photos"),
         "--gallery_source_type", os.getenv("SBIR_GALLERY_SOURCE_TYPE", "photo_edge"),
         "--display_source_type", os.getenv("SBIR_DISPLAY_SOURCE_TYPE", "photo"),
-        "--device",          os.getenv("SBIR_DEVICE", "auto"),
+        "--device",           os.getenv("SBIR_DEVICE", "auto"),
         "--sketchscape_root", os.getenv("SKETCHSCAPE_ROOT", "/home/irsl/workspace/SketchScape"),
-        "--model_path",      os.getenv("SBIR_MODEL_PATH",
-                                       "/home/irsl/workspace/SketchScape/models/fscoco_normal.pth"),
-        "--coarse_topk",     os.getenv("SBIR_COARSE_TOPK", "100"),
+        "--model_path",       os.getenv("SBIR_MODEL_PATH",
+                                        "/home/irsl/workspace/SketchScape/models/fscoco_normal.pth"),
+        "--coarse_topk",      os.getenv("SBIR_COARSE_TOPK", "100"),
+        "--enable_dinov2_fusion",
+        "--scape_weight",  str(scape_weight),
+        "--dinov2_weight", str(dino_weight),
     ]
-
-    if os.getenv("ENABLE_CLIP_FUSION", "false").lower() == "true" and clip_text_query:
-        cmd.extend([
-            "--enable_clip_fusion",
-            "--clip_text_query", clip_text_query,
-            "--clip_embeddings_path",
-            os.getenv("CLIP_IMAGE_EMBEDDINGS_PATH",
-                      "/home/irsl/workspace/CLIP_DB/cache/clip_image_embeddings.npz"),
-            "--scape_weight",   os.getenv("SBIR_SCAPE_WEIGHT",  "0.7"),
-            "--clip_weight",    os.getenv("SBIR_CLIP_WEIGHT",   "0.3"),
-            "--clip_model",     os.getenv("CLIP_MODEL_NAME",    "ViT-B-32"),
-            "--clip_pretrained", os.getenv("CLIP_PRETRAINED",   "laion2b_s34b_b79k"),
-        ])
-
-    if os.getenv("ENABLE_DINOV2_FUSION", "false").lower() == "true":
-        cmd.extend([
-            "--enable_dinov2_fusion",
-            "--scape_weight",  os.getenv("SBIR_SCAPE_WEIGHT", "0.7"),
-            "--dinov2_weight", os.getenv("SBIR_DINO_WEIGHT",  "0.3"),
-        ])
-        dinov2_npz = os.getenv("DINO_IMAGE_EMBEDDINGS_PATH", "")
-        if dinov2_npz:
-            cmd.extend(["--dinov2_embeddings_path", dinov2_npz])
-
+    dinov2_npz = os.getenv("DINO_IMAGE_EMBEDDINGS_PATH", "")
+    if dinov2_npz:
+        cmd.extend(["--dinov2_embeddings_path", dinov2_npz])
     try:
         completed = subprocess.run(cmd, check=True, capture_output=True, text=True)
-        return completed.stdout.strip()
+        return parse_json_from_mixed_output(completed.stdout.strip())
     except subprocess.CalledProcessError as e:
-        stderr = (e.stderr or "").strip()
-        stdout = (e.stdout or "").strip()
         raise RuntimeError(
-            f"SBIR failed (exit={e.returncode}) "
-            f"stderr={stderr or '<empty>'} stdout={stdout or '<empty>'}"
+            f"SBIR subprocess failed (exit={e.returncode}) stderr={e.stderr or ''}"
         ) from e
 
 
@@ -284,6 +284,72 @@ def _publish_resketch_request(sketch_file: str) -> None:
         "quality_level":          os.getenv("EXPERIMENT_QUALITY", ""),
         "score_formula":          state.get("score_formula", ""),
     })
+
+
+# ---------------------------------------------------------------------------
+# リアルタイム（インクリメンタル）検索
+# ---------------------------------------------------------------------------
+
+_PARTIAL_SKETCH_FILE = "writing_partial.png"
+_partial_lock        = threading.Lock()
+_partial_running     = False
+
+
+def _run_partial_sbir(partial_path: str) -> None:
+    global _partial_running
+    try:
+        sbir_result = run_sbir_once(partial_path, topk=5)
+        candidates  = sbir_result.get("topk", [])
+        _copy_candidates_for_web(candidates)
+        sketch_web   = _copy_sketch_for_web(partial_path)
+
+        # "choose:N" で即確定できるよう対話状態を保持
+        dialogue_state_by_sketch[_PARTIAL_SKETCH_FILE] = {
+            "sketch_path":          partial_path,
+            "sketch_web_path":      sketch_web,
+            "all_candidates":       candidates,
+            "remaining_candidates": list(candidates),
+            "current_question":     None,
+            "question_history":     [],
+            "score_formula":        "",
+        }
+
+        payload = {
+            "action_type":     "realtime_update",
+            "sketch_file":     _PARTIAL_SKETCH_FILE,
+            "topk":            candidates,
+            "sketch_web_path": sketch_web,
+        }
+        if result_pub is not None:
+            result_pub.publish(String(data=json.dumps(payload, ensure_ascii=False)))
+        rospy.loginfo("Partial SBIR: top1=%s",
+                      candidates[0].get("gallery_file", "?") if candidates else "none")
+    except Exception as e:
+        rospy.logwarn("Partial SBIR failed: %s", e)
+    finally:
+        with _partial_lock:
+            _partial_running = False
+
+
+def partial_callback(msg: String) -> None:
+    global _partial_running
+
+    data = msg.data
+    _, encoded = data.split('base64,', 1)
+    decoded    = b64decode(encoded)
+
+    sketch_dir   = os.path.join(os.path.dirname(__file__), '..', 'sketch')
+    os.makedirs(sketch_dir, exist_ok=True)
+    partial_path = os.path.join(sketch_dir, _PARTIAL_SKETCH_FILE)
+    with open(partial_path, 'wb') as f:
+        f.write(decoded)
+
+    with _partial_lock:
+        if _partial_running:
+            return  # 前の推論実行中はスキップ（最新ファイルは上書き済み）
+        _partial_running = True
+
+    threading.Thread(target=_run_partial_sbir, args=(partial_path,), daemon=True).start()
 
 
 # ---------------------------------------------------------------------------
@@ -418,10 +484,7 @@ def process_and_publish_sbir(sketch_path: str) -> None:
             rospy.logwarn("CLIP query extraction failed: %s", e)
 
     # SBIR を1回だけ実行（topk=DIALOGUE_INITIAL_TOPK）
-    result_json = run_sbir_once(
-        sketch_path, topk=DIALOGUE_INITIAL_TOPK, clip_text_query=clip_text_query
-    )
-    sbir_result = parse_json_from_mixed_output(result_json)
+    sbir_result = run_sbir_once(sketch_path, topk=DIALOGUE_INITIAL_TOPK)
 
     all_candidates = sbir_result.get("topk", [])
     rospy.loginfo("SBIR: %d candidates retrieved for %s", len(all_candidates), sketch_file)
@@ -604,8 +667,18 @@ def callback(msg):
 if __name__ == "__main__":
     rospy.init_node("subscribe_writing1")
 
+    # モデルとギャラリー特徴量を起動時に一度だけロード
+    if _USE_ENGINE:
+        rospy.loginfo("SBIREngine: loading model and gallery features...")
+        try:
+            get_engine().load()
+            rospy.loginfo("SBIREngine: ready.")
+        except Exception as _e:
+            rospy.logerr("SBIREngine load failed: %s — falling back to subprocess", _e)
+
     result_pub = rospy.Publisher("/sbir_top5", String, queue_size=10)
     rospy.Subscriber("/writing",          String, callback)
+    rospy.Subscriber("/writing_partial",  String, partial_callback)
     rospy.Subscriber("/vlm_user_feedback", String, feedback_callback)
 
     rospy.spin()
