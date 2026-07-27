@@ -75,6 +75,23 @@
             messageType: 'std_msgs/String'
           });
 
+          // リアルタイム検索用トピック
+          var partialTopic = new ROSLIB.Topic({
+            ros: ros,
+            name: '/writing_partial',
+            messageType: 'std_msgs/String'
+          });
+
+          // ストローク終了後 500ms デバウンスして部分スケッチを送信
+          var _partialTimer = null;
+          document.getElementById('canvas').addEventListener('stroke-end', function() {
+            clearTimeout(_partialTimer);
+            _partialTimer = setTimeout(function() {
+              var data = canvas.toDataURL('image/png');
+              partialTopic.publish(new ROSLIB.Message({ data: data }));
+            }, 500);
+          });
+
           resultTopic.subscribe(function(message) {
             try {
               const payload = JSON.parse(message.data);
@@ -111,7 +128,52 @@
       // ---------------------------------------------------------------
       // メイン描画関数
       // ---------------------------------------------------------------
+      // リアルタイム更新（描画中にストロークごとに更新）
+      function renderRealtimeUpdate(payload) {
+        const topk      = Array.isArray(payload.topk) ? payload.topk : [];
+        const sketchFile = payload.sketch_file || 'writing_partial.png';
+        const queryEl   = document.getElementById('sbir-query');
+        const resultsEl = document.getElementById('sbir-results');
+
+        const sketchWeb = payload.sketch_web_path;
+        if (sketchWeb && queryEl) {
+          queryEl.innerHTML = `<div class="query-wrap"><span style="color:#e74c3c; font-weight:bold;">● リアルタイム検索中</span><br><img class="sbir-query-img" src="${sketchWeb}?t=${Date.now()}" alt="partial sketch"></div>`;
+        }
+
+        if (!resultsEl || topk.length === 0) return;
+        resultsEl.innerHTML = topk.map((item, idx) => {
+          const rank  = item.rank ?? (idx + 1);
+          const score = typeof item.score === 'number' ? item.score.toFixed(4) : '-';
+          const name  = item.photo_file || item.gallery_file || '(no-name)';
+          const img   = item.photo_web_path || '';
+          return `
+            <div class="sbir-card" data-rank="${rank}">
+              <div class="sbir-rank">#${rank}</div>
+              ${img ? `<img class="sbir-photo-img" src="${img}" alt="rank ${rank}">` : '<div class="sbir-photo-missing">画像なし</div>'}
+              <div class="sbir-meta">${escapeHtml(name)}</div>
+              <div class="sbir-meta">score: ${score}</div>
+              <button onclick="confirmPartial('${escapeHtml(sketchFile)}', ${rank})"
+                      style="margin-top:6px; padding:5px 12px; background:#28a745; color:white; border:none; border-radius:6px; cursor:pointer; font-size:14px; font-weight:bold;">
+                これ！
+              </button>
+            </div>`;
+        }).join('');
+      }
+
+      function confirmPartial(sketchFile, rank) {
+        if (!vlmFeedbackTopic) return;
+        vlmFeedbackTopic.publish(new ROSLIB.Message({
+          data: JSON.stringify({ sketch_file: sketchFile, answer: 'choose:' + rank })
+        }));
+      }
+
       function renderSbirResult(payload) {
+        // リアルタイム更新は描画状態を変えずに候補だけ更新
+        if (payload.action_type === 'realtime_update') {
+          renderRealtimeUpdate(payload);
+          return;
+        }
+
         _clearStepTimers();
         isSending    = false;
         yesNoLocked  = false;

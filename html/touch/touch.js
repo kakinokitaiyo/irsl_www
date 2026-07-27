@@ -165,6 +165,9 @@ function handleEnd(evt) {
   }
   historyIndex = drawingHistory.length;
   drawingHistory.push(el2.toDataURL());
+
+  // リアルタイム検索用: ストローク終了を通知
+  el2.dispatchEvent(new CustomEvent('stroke-end', { bubbles: true }));
 }
 
 function handleCancel(evt) {
