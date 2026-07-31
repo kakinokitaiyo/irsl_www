@@ -1,5 +1,126 @@
 # Gemini VLM 逆質問統合 - 実装完了サマリー
 
+> 2026-07-31 更新（最新）
+>
+> このファイルの下部には過去の記述も残っています。実運用で参照すべき最新仕様はこの更新セクションです。
+
+---
+
+## 最新変更サマリー（2026-07-31）
+
+### 1) モデル常駐化（sbir_engine.py 新規追加）
+
+**ファイル:** `script/sbir_engine.py`
+
+起動時にSketchScapeモデルとギャラリー特徴量を一度だけロードし、
+検索時はスケッチエンコードのみ実行する常駐型エンジンを実装。
+
+| 方式 | 速度 |
+|------|------|
+| 旧: サブプロセス（毎回モデルロード） | ~4秒/回 |
+| 新: エンジン常駐（起動時に1回だけロード） | ~0.3秒/回 |
+
+**起動時の処理（1回のみ）:**
+- SketchScape モデルをGPUにロード
+- ギャラリー画像73枚の特徴量を一括計算しGPUメモリに保持
+- DINOv2埋め込みをDBから一括取得しメモリに保持
+
+**検索時の処理（毎回）:**
+- スケッチをエンコードするだけ（行列積で即座にランキング）
+
+### 2) sub_writing1.py の変更
+
+- `run_sbir_once()` をサブプロセス呼び出し → `SBIREngine.search()` 直接呼び出しに変更
+- エンジン未ロード時はサブプロセスにフォールバック（後方互換）
+- `parse_json_from_mixed_output()` の呼び出しを削除（エンジンが直接 dict を返すため不要）
+- `ENABLE_DINOV2_FUSION` のデフォルトを `false` → `true` に変更（DBに埋め込みがあるため）
+- スクリプトディレクトリを `sys.path` に追加（`sbir_engine` import 用）
+
+**起動コマンド（最新）:**
+```bash
+cd /home/irsl/workspace/irsl_www/script
+source /home/irsl/workspace/.venv.backup.1777612717/bin/activate
+
+export ENABLE_VLM=true
+export GEMINI_API_KEY="your-key"
+export ENABLE_DINOV2_FUSION=true   # デフォルトtrue（sbir_engine.pyが読む）
+export SBIR_SCAPE_WEIGHT=0.7
+export SBIR_DINO_WEIGHT=0.3
+
+python3 sub_writing1.py
+# 起動ログに "[SBIREngine] Ready. gallery=73 images" が出れば成功
+```
+
+### 3) DINOv2 埋め込みをDBから読み込む（sbir_engine.py）
+
+`.npz` ファイルの代わりに `home_robot.photo_embeddings` テーブルから起動時に一括ロード。
+
+- テーブルはすでに存在し73件の埋め込みが保存済み
+- 起動時に `fetch_dinov2_embeddings_from_db()` で全件取得 → numpy配列としてメモリに保持
+- `.npz` ファイルの管理が不要になった
+
+### 4) register_photos_and_edges.py の変更
+
+新規写真を追加する際にDINOv2埋め込みも同時に保存できる `--enable_dinov2` フラグを追加。
+
+```bash
+python3 /home/irsl/workspace/CLIP_DB/src/register_photos_and_edges.py \
+  --source_dir /path/to/new_photos \
+  --enable_dinov2 \
+  --host 133.15.97.94 --port 5432 \
+  --dbname kakinoki_db \
+  --user kakinoki_taiyo --password irsl \
+  --schema home_robot
+```
+
+写真追加後はノード再起動でエンジンが新ギャラリーを自動ロード。
+
+### 5) リアルタイム検索とGemini対話の競合解消（touch.html）
+
+**問題:** Send後もストローク終了イベントが発火し、`realtime_update` がダイアログUIを上書きしていた。
+
+**解決策:** `_dialogueMode` フラグによるモード切り替え
+
+| イベント | フラグ | 動作 |
+|---------|--------|------|
+| Send クリック | `true` | partial送信停止・タイマーキャンセル |
+| resketch 受信 | `false` | partial送信再開 |
+| execute 受信 | `false` | partial送信再開 |
+| Clear クリック | `false` | partial送信再開 |
+| realtime_update 受信時 | `true`なら無視 | ダイアログUIを保護 |
+
+### 6) 表示画像の軽量化（サムネイル化）
+
+**問題:** フル解像度画像の読み込みがキャンバス描画と干渉してラグが発生。
+
+**変更内容:**
+
+`_copy_candidates_for_web()` にPILを使ったサムネイル生成を追加:
+- フル解像度 → JPEG 320px（環境変数 `SBIR_THUMB_SIZE` で変更可）
+- `ImageOps.exif_transpose()` でスマートフォン写真のEXIF回転を補正
+- `quality=82, optimize=True` で圧縮
+
+`touch.css` にキャンバスの独立レイヤー化を追加:
+```css
+#canvas {
+  will-change: transform;
+  touch-action: none;
+}
+```
+
+`touch.html` の全 `<img>` タグに非同期デコードを追加:
+```html
+decoding="async" loading="lazy"
+```
+
+サムネイルサイズの変更:
+```bash
+export SBIR_THUMB_SIZE=240  # 小さく
+export SBIR_THUMB_SIZE=400  # 高画質（デフォルト: 320）
+```
+
+---
+
 > 2026-05-22 更新（重要）
 >
 > このファイルの下部には過去の記述も残っています。実運用で参照すべき最新仕様はこの更新セクションです。

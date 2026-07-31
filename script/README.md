@@ -102,18 +102,24 @@
 - 「詳しい技術内容を見たい」→ [FINAL_REPORT_APPENDIX.md](FINAL_REPORT_APPENDIX.md)
 - 「エラーの原因と修正を見たい」→ [ERROR_FIX_LOG.md](ERROR_FIX_LOG.md)
 
-## すぐ試すとき（最小）
+## すぐ試すとき（最小・最新）
 
 ```bash
+cd /home/irsl/workspace/irsl_www/script
+source /home/irsl/workspace/.venv.backup.1777612717/bin/activate
 export GEMINI_API_KEY="your-key"
 export ENABLE_VLM=true
-export GEMINI_MODEL="gemini-2.5-pro"
 python3 sub_writing1.py
+# 起動ログに "[SBIREngine] Ready. gallery=73 images" が出れば成功
 ```
+
+> **2026-07-31 以降:** `sbir_engine.py` により起動時にモデルとギャラリー特徴量を
+> 一括ロードします（初回起動は20〜30秒かかりますが、検索は ~0.3秒/回 になります）。
+> `ENABLE_DINOV2_FUSION` はデフォルト `true` になりました（DBに埋め込みがあるため）。
 
 ## 実行コマンド集（コピペ用）
 
-### 1) CLIP フュージョンを使わない（推奨: DINOv2 のみ有効）
+### 1) 推奨: エンジン常駐 + DINOv2 + VLM対話
 
 ```bash
 cd /home/irsl/workspace/irsl_www/script
@@ -121,46 +127,51 @@ source /home/irsl/workspace/.venv.backup.1777612717/bin/activate
 
 export ENABLE_VLM=true
 export GEMINI_API_KEY="your-key"
-export ENABLE_CLIP_FUSION=false
-export ENABLE_DINOV2_FUSION=true
+export ENABLE_DINOV2_FUSION=true   # デフォルトtrue。省略可
+export SBIR_SCAPE_WEIGHT=0.7
 export SBIR_DINO_WEIGHT=0.3
 
 python3 sub_writing1.py
 ```
 
-### 2) CLIP フュージョンを使う
-
-```bash
-cd /home/irsl/workspace/irsl_www/script
-source /home/irsl/workspace/.venv.backup.1777612717/bin/activate
-
-export ENABLE_VLM=true
-export GEMINI_API_KEY="your-key"
-export ENABLE_CLIP_FUSION=true
-export CLIP_IMAGE_EMBEDDINGS_PATH="/home/irsl/workspace/CLIP_DB/cache/clip_image_embeddings.npz"
-export SBIR_CLIP_WEIGHT=0.3
-export SBIR_SCAPE_WEIGHT=0.7
-
-python3 sub_writing1.py
-```
-
-### 3) VLM なしで SBIR のみ動かす
+### 2) VLM なし（リアルタイム検索のみ）
 
 ```bash
 cd /home/irsl/workspace/irsl_www/script
 source /home/irsl/workspace/.venv.backup.1777612717/bin/activate
 
 export ENABLE_VLM=false
-export ENABLE_CLIP_FUSION=false
-export ENABLE_DINOV2_FUSION=true
 
 python3 sub_writing1.py
+```
+
+### 3) 新規写真を追加するとき
+
+```bash
+# 写真撮影後、DBに登録（DINOv2埋め込みも同時に保存）
+python3 /home/irsl/workspace/CLIP_DB/src/register_photos_and_edges.py \
+  --source_dir /path/to/new_photos \
+  --enable_dinov2 \
+  --host 133.15.97.94 --port 5432 \
+  --dbname kakinoki_db \
+  --user kakinoki_taiyo --password irsl \
+  --schema home_robot
+
+# 登録後はノードを再起動するだけでエンジンが新ギャラリーを読み込む
+```
+
+### 4) サムネイルサイズを変更するとき
+
+```bash
+export SBIR_THUMB_SIZE=240   # 小さく（デフォルト: 320）
+export SBIR_THUMB_SIZE=400   # 高画質
 ```
 
 ### 位置関係の補足
 
 - `sub_writing1.py` の実行場所: `irsl_www/script/`
+- `sbir_engine.py`: 同フォルダ。モデル常駐エンジン（2026-07-31 追加）
 - 生成された結果 JSON: `irsl_www/sketch_result/`
-- 実行例の詳細: [IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md)
-- DINOv2 の説明: [../README.md](../README.md)
+- 実験ログ: `irsl_www/experiment_log.csv`
+- 実装詳細: [IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md)
 
