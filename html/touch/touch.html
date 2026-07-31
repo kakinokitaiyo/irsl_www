@@ -54,6 +54,7 @@
       let isSending      = false;  // Send後のローディング表示フラグ
       let sendingStep    = 0;      // 現在表示中のステップ
       let stepTimerIds   = [];     // フォールバックタイマーID
+      let _dialogueMode  = false;  // true のとき partial 送信・受信を無視
 
       const ros = ros_start();
       if (ros) {
@@ -82,11 +83,13 @@
             messageType: 'std_msgs/String'
           });
 
-          // ストローク終了後 500ms デバウンスして部分スケッチを送信
+          // ストローク終了後 500ms デバウンスして部分スケッチを送信（対話中は停止）
           var _partialTimer = null;
           document.getElementById('canvas').addEventListener('stroke-end', function() {
+            if (_dialogueMode) return;
             clearTimeout(_partialTimer);
             _partialTimer = setTimeout(function() {
+              if (_dialogueMode) return;
               var data = canvas.toDataURL('image/png');
               partialTopic.publish(new ROSLIB.Message({ data: data }));
             }, 500);
@@ -149,7 +152,7 @@
           return `
             <div class="sbir-card" data-rank="${rank}">
               <div class="sbir-rank">#${rank}</div>
-              ${img ? `<img class="sbir-photo-img" src="${img}" alt="rank ${rank}">` : '<div class="sbir-photo-missing">画像なし</div>'}
+              ${img ? `<img class="sbir-photo-img" src="${img}" alt="rank ${rank}" decoding="async" loading="lazy">` : '<div class="sbir-photo-missing">画像なし</div>'}
               <div class="sbir-meta">${escapeHtml(name)}</div>
               <div class="sbir-meta">score: ${score}</div>
               <button onclick="confirmPartial('${escapeHtml(sketchFile)}', ${rank})"
@@ -168,10 +171,15 @@
       }
 
       function renderSbirResult(payload) {
-        // リアルタイム更新は描画状態を変えずに候補だけ更新
+        // リアルタイム更新: 対話中は無視する
         if (payload.action_type === 'realtime_update') {
-          renderRealtimeUpdate(payload);
+          if (!_dialogueMode) renderRealtimeUpdate(payload);
           return;
+        }
+
+        // 対話結果を受信したらモードを更新
+        if (payload.action_type === 'resketch' || payload.action_type === 'execute') {
+          _dialogueMode = false;  // 描画モードに戻る
         }
 
         _clearStepTimers();
@@ -218,7 +226,7 @@
           resultsEl.innerHTML = `
             <div class="sbir-card" style="border:3px solid #28a745; max-width:260px; margin:0 auto;">
               <div class="sbir-rank" style="background:#28a745;">確定</div>
-              ${img ? `<img class="sbir-photo-img" src="${img}" alt="${escapeHtml(name)}">` : '<div class="sbir-photo-missing">画像なし</div>'}
+              ${img ? `<img class="sbir-photo-img" src="${img}" alt="${escapeHtml(name)}" decoding="async" loading="lazy">` : '<div class="sbir-photo-missing">画像なし</div>'}
               <div class="sbir-meta" style="font-weight:bold;">${escapeHtml(name)}</div>
             </div>`;
         } else {
@@ -230,7 +238,7 @@
             return `
               <div class="sbir-card" data-rank="${rank}" id="sbir-card-${rank}">
                 <div class="sbir-rank">#${rank}</div>
-                ${img ? `<img class="sbir-photo-img" src="${img}" alt="rank ${rank}: ${escapeHtml(name)}">` : '<div class="sbir-photo-missing">画像なし</div>'}
+                ${img ? `<img class="sbir-photo-img" src="${img}" alt="rank ${rank}: ${escapeHtml(name)}" decoding="async" loading="lazy">` : '<div class="sbir-photo-missing">画像なし</div>'}
                 <div class="sbir-meta">${escapeHtml(name)}</div>
                 <div class="sbir-meta">score: ${score}</div>
               </div>`;
@@ -278,7 +286,7 @@
           const name   = cand.photo_file || payload.selected_file || '(不明)';
           html += `<div style="background:#d4edda; padding:16px; border-radius:8px; text-align:center;">
             <p style="margin:0; font-size:18px; font-weight:bold; color:#155724;">物体が確定しました</p>
-            ${imgUrl ? `<img src="${imgUrl}" style="display:block; margin:12px auto; width:100%; max-width:260px; height:160px; object-fit:contain; background:#fff; border-radius:8px;">` : ''}
+            ${imgUrl ? `<img src="${imgUrl}" decoding="async" loading="lazy" style="display:block; margin:12px auto; width:100%; max-width:260px; height:160px; object-fit:contain; background:#fff; border-radius:8px;">` : ''}
             <p style="margin:6px 0 0; color:#155724; font-size:14px;">${escapeHtml(name)}</p>
           </div>`;
           html += `<div style="margin-top:12px; display:flex; gap:10px; justify-content:center; flex-wrap:wrap;">
@@ -312,7 +320,7 @@
               const img   = item.photo_web_path || '';
               const chooseAction = `handleVlmAnswer('choose:${idx + 1}')`;
               const imgTag = img
-                ? `<img src="${img}" alt="${escapeHtml(name)}" style="width:100%; height:88px; object-fit:contain; background:#fafafa; border-radius:6px;">`
+                ? `<img src="${img}" alt="${escapeHtml(name)}" decoding="async" loading="lazy" style="width:100%; height:88px; object-fit:contain; background:#fafafa; border-radius:6px;">`
                 : `<div style="height:88px; background:#f0f0f0; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:11px; color:#999;">画像なし</div>`;
               // yes_no はサブアクション（小さめ）、multi_choice はメインアクション（大きめ）
               const btnStyle = questionMode === 'yes_no'
@@ -398,7 +406,7 @@
           html += `<div style="background:#d4edda; padding:12px; border-radius:8px; margin:10px 0; text-align:center;">
             <p style="margin:0; color:#155724;"><b>決定: 候補#${selectedId}</b></p>
             <p style="margin:5px 0 0; color:#155724; font-size:12px;">${escapeHtml(reasoning)}</p>
-            ${imgUrl ? `<img src="${imgUrl}" style="width:100%; max-width:300px; height:92px; object-fit:contain; background:#fafafa; border-radius:8px; margin:12px auto; display:block;">` : ''}
+            ${imgUrl ? `<img src="${imgUrl}" decoding="async" loading="lazy" style="width:100%; max-width:300px; height:92px; object-fit:contain; background:#fafafa; border-radius:8px; margin:12px auto; display:block;">` : ''}
             <button type="button" style="margin-top:12px; min-width:160px; min-height:56px; font-size:16px; font-weight:bold; background:#28a745; color:#fff; border:none; border-radius:10px;" onclick="handleVlmAnswer('confirm')">確定</button>
           </div>
           <div style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap; justify-content:center;">
@@ -482,7 +490,7 @@
             ? (Number(item.rank) === Number(binaryMapping.yes_candidate_id) ? 'YES' : 'NO')
             : 'この候補を選ぶ';
           const imgHtml       = item.img
-            ? `<img class="sbir-photo-img" src="${item.img}" style="width:100%; height:92px; object-fit:contain; background:#fafafa; border-radius:8px;">`
+            ? `<img class="sbir-photo-img" src="${item.img}" decoding="async" loading="lazy" style="width:100%; height:92px; object-fit:contain; background:#fafafa; border-radius:8px;">`
             : `<div class="sbir-photo-missing" style="height:92px;">画像なし</div>`;
           return `<div class="vlm-candidate-card" style="border:2px solid ${borderColor}; border-radius:12px; padding:10px; background:#fff; cursor:pointer;" onclick="${action}">
             ${imgHtml}
@@ -670,6 +678,9 @@
             var msg = new ROSLIB.Message({ data: data });
             rostopic.publish(msg);
         }
+        // 対話モードに移行（partial 送信・受信を停止）
+        _dialogueMode = true;
+        clearTimeout(_partialTimer);
         // ローディングパネルを即時表示（フォールバックタイマー付き）
         isSending = true;
         document.getElementById('sbir-query').innerHTML   = '';
@@ -682,6 +693,11 @@
         //context.fillRect(0, 0, canvas.width, canvas.height);
         //// background is transparent
         context.clearRect(0, 0, canvas.width, canvas.height);
+    });
+
+    // Clear ボタン: 描画モードに戻す
+    document.querySelector('#buttonClear').addEventListener('click', function() {
+        _dialogueMode = false;
     });
   </script>
 </body>

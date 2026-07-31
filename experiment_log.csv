@@ -1,0 +1,19 @@
+timestamp,sketch_file,sbir_top1_file,sbir_top1_score,sbir_top1_sketchscape,dialogue_turns,outcome,confirmed_file,confirmed_rank,target_object,quality_level,score_formula
+2026-07-22T15:03:00,writing_24.png,cup04_edge.png,0.8812333941459656,0.7026494741439819,3,confirmed,pet01.jpeg,11,pet,rough,score = 0.7 * score_sketchscape_norm + 0.3 * score_dinov2_norm
+2026-07-22T15:04:51,writing_25.png,IMG_2789_edge.png,0.9639183282852173,0.6338731050491333,0,confirmed,pet01.jpeg,2,pet,normal,score = 0.7 * score_sketchscape_norm + 0.3 * score_dinov2_norm
+2026-07-22T15:07:18,writing_26.png,pet01_edge.png,1.0,0.7845852375030518,0,confirmed,pet01.jpeg,1,pet,careful,score = 0.7 * score_sketchscape_norm + 0.3 * score_dinov2_norm
+2026-07-22T15:14:08,writing_27.png,cup04_edge.png,0.8024049997329712,0.6311285495758057,0,confirmed,can01.jpeg,3,can,rough,score = 0.7 * score_sketchscape_norm + 0.3 * score_dinov2_norm
+2026-07-22T15:19:05,writing_28.png,cup04_edge.png,0.9370450973510742,0.7403847575187683,0,confirmed,can01.jpeg,2,can,normal,score = 0.7 * score_sketchscape_norm + 0.3 * score_dinov2_norm
+2026-07-22T15:22:28,writing_29.png,can01_edge.png,0.96075439453125,0.7885590195655823,0,confirmed,can01.jpeg,1,can,careful,score = 0.7 * score_sketchscape_norm + 0.3 * score_dinov2_norm
+2026-07-22T15:28:25,writing_30.png,IMG_2772_edge.png,0.8320224285125732,0.5500597357749939,0,confirmed,IMG_2771.JPG,2,pokemon,rough,score = 0.7 * score_sketchscape_norm + 0.3 * score_dinov2_norm
+2026-07-22T15:30:47,writing_31.png,IMG_2771_edge.png,1.0,0.6769592761993408,0,confirmed,IMG_2771.JPG,1,pokemon,normal,score = 0.7 * score_sketchscape_norm + 0.3 * score_dinov2_norm
+2026-07-22T15:33:06,writing_32.png,IMG_2771_edge.png,1.0,0.6715283393859863,0,confirmed,IMG_2771.JPG,1,pokemon,careful,score = 0.7 * score_sketchscape_norm + 0.3 * score_dinov2_norm
+2026-07-22T15:46:59,writing_33.png,IMG_2813_edge.png,0.8567293882369995,0.6118637919425964,2,confirmed,IMG_2787.JPG,11,cup,rough,score = 0.7 * score_sketchscape_norm + 0.3 * score_dinov2_norm
+2026-07-22T15:50:52,writing_34.png,cup01_edge.png,0.9481199979782104,0.6957628726959229,0,confirmed,IMG_2787.JPG,3,cup,normal,score = 0.7 * score_sketchscape_norm + 0.3 * score_dinov2_norm
+2026-07-22T15:51:02,writing_34.png,cup01_edge.png,0.9481199979782104,0.6957628726959229,0,confirmed,IMG_2787.JPG,3,cup,normal,score = 0.7 * score_sketchscape_norm + 0.3 * score_dinov2_norm
+2026-07-22T15:53:14,writing_35.png,cup01_edge.png,0.9963085651397705,0.7678225636482239,0,confirmed,IMG_2787.JPG,2,cup,careful,score = 0.7 * score_sketchscape_norm + 0.3 * score_dinov2_norm
+2026-07-24T14:41:20,writing_partial.png,,,,0,confirmed,cup04.jpeg,1,cup,careful,
+2026-07-24T14:41:44,writing_partial.png,,,,0,confirmed,can01.jpeg,2,cup,careful,
+2026-07-24T14:41:44,writing_partial.png,,,,0,confirmed,IMG_2813.JPG,1,cup,careful,
+2026-07-24T14:41:45,writing_partial.png,,,,0,confirmed,IMG_2813.JPG,1,cup,careful,
+2026-07-28T15:16:19,writing_partial.png,,,,0,confirmed,cup01.jpeg,1,cup,careful,

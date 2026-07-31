@@ -4,6 +4,12 @@
   overflow: scroll;
 }
 
+/* キャンバスを独立コンポジットレイヤーに置いて画像ロードと干渉させない */
+#canvas {
+  will-change: transform;
+  touch-action: none;
+}
+
 #buttonSend, #buttonClear, #buttonEraser, #buttonUndo, #buttonRedo {
     display:inline-block;
     position:relative;

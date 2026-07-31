@@ -86,7 +86,11 @@ def _copy_sketch_for_web(sketch_path: str) -> str | None:
         return None
 
 
+_THUMB_SIZE = int(os.getenv("SBIR_THUMB_SIZE", "320"))  # px (正方形に収まるサイズ)
+
+
 def _copy_candidates_for_web(candidates: list) -> list:
+    from PIL import Image as _PILImage
     photo_web_dir = os.path.join(_web_root(), 'sbir_photos')
     os.makedirs(photo_web_dir, exist_ok=True)
     for item in candidates:
@@ -94,13 +98,19 @@ def _copy_candidates_for_web(candidates: list) -> list:
         rank = item.get("rank", 0)
         if not src or not os.path.isfile(src):
             continue
-        base = os.path.basename(src)
-        dst_name = f"r{rank}_{base}"
+        base_stem = os.path.splitext(os.path.basename(src))[0]
+        dst_name = f"r{rank}_{base_stem}.jpg"
+        dst_path = os.path.join(photo_web_dir, dst_name)
         try:
-            shutil.copy2(src, os.path.join(photo_web_dir, dst_name))
+            from PIL import ImageOps as _PILImageOps
+            with _PILImage.open(src) as img:
+                img = _PILImageOps.exif_transpose(img)  # EXIF 回転を適用してから縮小
+                img = img.convert("RGB")
+                img.thumbnail((_THUMB_SIZE, _THUMB_SIZE), _PILImage.LANCZOS)
+                img.save(dst_path, "JPEG", quality=82, optimize=True)
             item["photo_web_path"] = f"/touch/sbir_photos/{dst_name}"
         except Exception as e:
-            rospy.logwarn("Failed to copy photo (%s): %s", src, e)
+            rospy.logwarn("Failed to create thumbnail (%s): %s", src, e)
     return candidates
 
 
