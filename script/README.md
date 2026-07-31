@@ -49,9 +49,9 @@ python3 sub_writing1.py
 python3 /home/irsl/workspace/CLIP_DB/src/register_photos_and_edges.py \
   --source_dir /path/to/new_photos \
   --enable_dinov2 \
-  --host 133.15.97.94 --port 5432 \
-  --dbname kakinoki_db \
-  --user kakinoki_taiyo --password irsl \
+  --host *** --port *** \
+  --dbname *** \
+  --user *** --password *** \
   --schema home_robot
 # 追加後はノードを再起動するだけ
 ```
