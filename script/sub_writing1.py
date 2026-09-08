@@ -30,6 +30,7 @@ except ImportError:
     rospy.logwarn("VLM module not available. Dialogue will fall back to multi-choice.")
 
 result_pub = None
+hsr_execute_pub = None  # /sbir_execute_object: 物体確定時にHSRブリッジへ送信
 
 # SBIR は最初の1回のみ実行。全候補をここに保存して対話で絞り込む。
 # { sketch_file: { sketch_path, sketch_web_path, all_candidates,
@@ -250,7 +251,13 @@ def _publish_confirmed(sketch_file: str, candidate: dict) -> None:
         "sketch_web_path": state.get("sketch_web_path"),
     }
     _save_and_publish(sketch_file, payload)
-    rospy.loginfo("Confirmed: %s for %s", candidate.get("photo_file"), sketch_file)
+    rospy.loginfo("Confirmed (pending user confirm): %s for %s",
+                  candidate.get("photo_file"), sketch_file)
+
+    # UIの「確定」ボタンが押されるまでロボットは動かさない
+    # feedback_callback で answer=="confirm" を受信してから /sbir_execute_object を送信する
+    if state:
+        state["pending_execute_file"] = candidate.get("photo_file", "")
 
     _log_experiment({
         "timestamp":              datetime.now().isoformat(timespec='seconds'),
@@ -578,6 +585,16 @@ def feedback_callback(msg):
             run_dialogue_turn(sketch_file)
         return
 
+    # --- ユーザーが「確定」ボタンを押した: HSRブリッジへ物体ファイル名を送信 ---
+    if answer == "confirm":
+        pending_file = state.get("pending_execute_file", "")
+        if pending_file and hsr_execute_pub is not None:
+            hsr_execute_pub.publish(String(data=pending_file))
+            rospy.loginfo("HSR execute published (user confirmed): %s", pending_file)
+        else:
+            rospy.logwarn("confirm received but no pending_execute_file for %s", sketch_file)
+        return
+
     # --- multi_choice での候補直接選択: "choose:N"（表示中の1-based順位）---
     if answer.startswith("choose:"):
         try:
@@ -687,6 +704,7 @@ if __name__ == "__main__":
             rospy.logerr("SBIREngine load failed: %s — falling back to subprocess", _e)
 
     result_pub = rospy.Publisher("/sbir_top5", String, queue_size=10)
+    hsr_execute_pub = rospy.Publisher("/sbir_execute_object", String, queue_size=1, latch=True)
     rospy.Subscriber("/writing",          String, callback)
     rospy.Subscriber("/writing_partial",  String, partial_callback)
     rospy.Subscriber("/vlm_user_feedback", String, feedback_callback)
