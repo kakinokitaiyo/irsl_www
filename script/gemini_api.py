@@ -203,7 +203,7 @@ def extract_search_query_from_sketch(
     sketch_path: str,
     client: Optional[object] = None,
     gemini_api_key: Optional[str] = None,
-    model_id: str = "gemini-robotics-er-1.6-preview",
+    model_id: str = "gemini-2.5-flash",
 ) -> Optional[str]:
     """Extract a short text query from a sketch using Gemini."""
     if not GEMINI_AVAILABLE:
@@ -213,7 +213,7 @@ def extract_search_query_from_sketch(
     if client is None:
         client = init_gemini_client(gemini_api_key)
 
-    default_model = "gemini-robotics-er-1.6-preview"
+    default_model = "gemini-2.5-flash"
     requested_model = os.getenv("GEMINI_QUERY_MODEL", model_id).strip() or default_model
     candidate_models = [requested_model] + ([default_model] if requested_model != default_model else [])
 
@@ -283,27 +283,27 @@ def call_gemini_vlm(
     client: object,
     sketch_path: str,
     candidate_paths: List[str],
-    model_id: str = "gemini-robotics-er-1.6-preview"
+    model_id: str = "gemini-2.5-flash"
 ) -> Dict:
     """
     Call Gemini API with sketch and candidate images.
-    
+
     Args:
         client: Initialized Gemini client
         sketch_path: Path to the query sketch image
         candidate_paths: List of 5 candidate image paths
         model_id: Gemini model to use
-    
+
     Returns:
         Parsed JSON response from VLM
     """
     if not GEMINI_AVAILABLE:
         raise ImportError("google-genai package not installed. Install with: pip install google-genai")
-    
+
     if len(candidate_paths) != 5:
         raise ValueError(f"Expected 5 candidate images, got {len(candidate_paths)}")
-    
-    default_model = "gemini-robotics-er-1.6-preview"
+
+    default_model = "gemini-2.5-flash"
     requested_model = os.getenv("GEMINI_MODEL", model_id).strip()
     if not requested_model:
         requested_model = default_model
@@ -615,7 +615,7 @@ def generate_dialogue_question(
     client: object,
     sketch_path: str,
     candidate_paths: List[str],
-    model_id: str = "gemini-robotics-er-1.6-preview",
+    model_id: str = "gemini-2.5-flash",
     question_history: Optional[List[Dict]] = None,
 ) -> Dict:
     """
@@ -639,7 +639,7 @@ def generate_dialogue_question(
     if n == 0:
         raise ValueError("No candidate paths provided")
 
-    default_model = "gemini-robotics-er-1.6-preview"
+    default_model = "gemini-2.5-flash"
     requested_model = os.getenv("GEMINI_MODEL", model_id).strip() or default_model
     candidate_models = [requested_model]
     if requested_model != default_model:

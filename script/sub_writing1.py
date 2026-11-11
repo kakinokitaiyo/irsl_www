@@ -43,7 +43,7 @@ clip_query_by_sketch = {}
 # 初回 SBIR で取得する候補数（対話の絞り込み対象）
 DIALOGUE_INITIAL_TOPK = int(os.getenv("SBIR_DIALOGUE_TOPK", "30"))
 # 1ターンで VLM に渡す候補の最大枚数（全残り候補をこの枚数以内で一括分類）
-DIALOGUE_VLM_MAX_CANDIDATES = int(os.getenv("SBIR_VLM_MAX_CANDIDATES", "20"))
+DIALOGUE_VLM_MAX_CANDIDATES = int(os.getenv("SBIR_VLM_MAX_CANDIDATES", "30"))
 
 # ---------------------------------------------------------------------------
 # 実験ログ
@@ -152,16 +152,18 @@ except ImportError:
 
 def run_sbir_once(sketch_path: str, topk: int | None = None) -> dict:
     """スケッチを検索して結果 dict を返す。エンジン常駐型（高速）。"""
-    actual_topk = topk if topk is not None else int(os.getenv("SBIR_TOPK", str(DIALOGUE_INITIAL_TOPK)))
-    scape_weight = float(os.getenv("SBIR_SCAPE_WEIGHT", "0.7"))
-    dino_weight  = float(os.getenv("SBIR_DINO_WEIGHT",  "0.3"))
+    actual_topk  = topk if topk is not None else int(os.getenv("SBIR_TOPK", str(DIALOGUE_INITIAL_TOPK)))
+    scape_weight = float(os.getenv("SBIR_SCAPE_WEIGHT", "0.6"))
+    dino_weight  = float(os.getenv("SBIR_DINO_WEIGHT",  "0.2"))
+    patch_weight = float(os.getenv("SBIR_PATCH_WEIGHT", "0.2"))
 
     if _USE_ENGINE:
         engine = get_engine()
         if not engine._loaded:
             raise RuntimeError("SBIREngine is not loaded yet.")
         return engine.search(sketch_path, topk=actual_topk,
-                             scape_weight=scape_weight, dino_weight=dino_weight)
+                             scape_weight=scape_weight, dino_weight=dino_weight,
+                             patch_weight=patch_weight)
 
     # フォールバック: サブプロセス（エンジン未使用時）
     clip_db_root = os.getenv("CLIP_DB_ROOT", "/home/irsl/workspace/CLIP_DB")
@@ -228,14 +230,14 @@ def _save_and_publish(sketch_file: str, payload: dict) -> None:
 def _publish_confirmed(sketch_file: str, candidate: dict) -> None:
     state = dialogue_state_by_sketch.get(sketch_file, {})
 
-    # 確定物を先頭にした Top-5 を構成（touch.html は topk[0] を確定物として扱う）
-    all_top5 = state.get("all_candidates", [])[:5]
-    _copy_candidates_for_web(all_top5)
+    # 確定物を先頭にした Top-10 を構成（touch.html は topk[0] を確定物として扱う）
+    all_top10 = state.get("all_candidates", [])[:10]
+    _copy_candidates_for_web(all_top10)
     confirmed_id = candidate.get("photo_id")
-    for item in all_top5:
+    for item in all_top10:
         item["confirmed"] = (item.get("photo_id") == confirmed_id)
-    confirmed_items = [c for c in all_top5 if c.get("photo_id") == confirmed_id]
-    other_items     = [c for c in all_top5 if c.get("photo_id") != confirmed_id]
+    confirmed_items = [c for c in all_top10 if c.get("photo_id") == confirmed_id]
+    other_items     = [c for c in all_top10 if c.get("photo_id") != confirmed_id]
     topk_ordered    = confirmed_items + other_items if confirmed_items else [candidate] + other_items
 
     dialogue_turns = len(state.get("question_history", []))
@@ -315,7 +317,7 @@ _partial_running     = False
 def _run_partial_sbir(partial_path: str) -> None:
     global _partial_running
     try:
-        sbir_result = run_sbir_once(partial_path, topk=5)
+        sbir_result = run_sbir_once(partial_path, topk=10)
         candidates  = sbir_result.get("topk", [])
         _copy_candidates_for_web(candidates)
         sketch_web   = _copy_sketch_for_web(partial_path)
@@ -384,8 +386,8 @@ def run_dialogue_turn(sketch_file: str) -> None:
     sketch_path = state["sketch_path"]
     question_history = state.get("question_history", [])
 
-    # UI 表示用は上位5件、VLM 分類対象は全残り候補（上限 DIALOGUE_VLM_MAX_CANDIDATES）
-    show_candidates = remaining[:5]
+    # UI 表示用は上位10件、VLM 分類対象は全残り候補（上限 DIALOGUE_VLM_MAX_CANDIDATES）
+    show_candidates = remaining[:10]
     classify_candidates = remaining[:DIALOGUE_VLM_MAX_CANDIDATES]
 
     _copy_candidates_for_web(show_candidates)

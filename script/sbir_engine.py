@@ -39,11 +39,23 @@ class SBIREngine:
         self._gallery_features = None  # (N, D) tensor on device
         self._gallery_images   = None  # list[dict]
         self._display_by_key   = None  # dict[str, dict]
-        # DINOv2
+        # DINOv2 グローバル埋め込み
         self._dino_model        = None
         self._dino_id_to_index  = None
         self._dino_embeddings   = None
         self._enable_dinov2     = False
+        # DINOv2 パッチ埋め込み（部分スケッチマッチング用）
+        self._patch_id_to_index = None
+        self._patch_embeddings  = None  # (N, 256, 768)
+        self._enable_patch      = False
+        # CLIP（テキスト照合用）
+        self._clip_model        = None
+        self._clip_preprocess   = None
+        self._clip_tokenizer    = None
+        self._enable_clip_text  = False
+        # Gemini VLM
+        self._gemini_client     = None
+        self._enable_gemini     = False
         # デバイス
         self._device = None
 
@@ -62,6 +74,7 @@ class SBIREngine:
             select_device, load_rgb_image_from_bytes,
             canonical_name_key, resolve_db_images_with_cache,
             fetch_images_from_db, fetch_dinov2_embeddings_from_db,
+            fetch_patch_embeddings_from_db,
             load_dinov2_model,
         )
 
@@ -146,7 +159,7 @@ class SBIREngine:
         self._gallery_features = gallery_features  # GPU に常駐
         self._sbir_model       = sbir_model
 
-        # ---- DINOv2 埋め込みを DB から一括ロード ----
+        # ---- DINOv2 グローバル埋め込みを DB から一括ロード ----
         if args.enable_dinov2_fusion:
             photo_ids = [p['id'] for p in display_photos]
             print(f'[SBIREngine] Loading DINOv2 embeddings from DB ({len(photo_ids)} photos)...')
@@ -159,11 +172,104 @@ class SBIREngine:
                 print(f'[SBIREngine] DINOv2 embeddings loaded: {len(db_dino_map)} entries')
             else:
                 print('[SBIREngine] WARNING: no DINOv2 embeddings found in DB')
+
+            # ---- DINOv2 パッチ埋め込みを DB から一括ロード ----
+            print(f'[SBIREngine] Loading DINOv2 patch embeddings from DB ({len(photo_ids)} photos)...')
+            db_patch_map = fetch_patch_embeddings_from_db(args, photo_ids)
+            if db_patch_map:
+                p_ids_arr   = np.array(sorted(db_patch_map.keys()), dtype=np.int64)
+                patch_arr   = np.stack([db_patch_map[i] for i in p_ids_arr], axis=0)
+                self._patch_id_to_index = {int(pid): idx for idx, pid in enumerate(p_ids_arr)}
+                self._patch_embeddings  = patch_arr   # (N, 256, 768)
+                self._enable_patch      = True
+                print(f'[SBIREngine] Patch embeddings loaded: {len(db_patch_map)} entries, shape={patch_arr.shape}')
+            else:
+                print('[SBIREngine] WARNING: no patch embeddings found in DB')
+
             print('[SBIREngine] Loading DINOv2 model for sketch encoding...')
             self._dino_model = load_dinov2_model(device)
 
+        # ---- CLIP モデルをロード（テキスト照合用） ----
+        try:
+            import open_clip as _open_clip
+            clip_model, _, clip_preprocess = _open_clip.create_model_and_transforms(
+                'ViT-B-32', pretrained='laion2b_s34b_b79k')
+            self._clip_model      = clip_model.to(device).eval()
+            self._clip_preprocess = clip_preprocess
+            self._clip_tokenizer  = _open_clip.get_tokenizer('ViT-B-32')
+            self._enable_clip_text = True
+            print('[SBIREngine] CLIP text model loaded.')
+        except Exception as e:
+            print(f'[SBIREngine] CLIP load failed (Gemini stage2 disabled): {e}')
+
+        # ---- Gemini クライアントを初期化 ----
+        gemini_key = os.getenv('GEMINI_API_KEY', '')
+        if gemini_key:
+            try:
+                from google import genai as _genai
+                self._gemini_client = _genai.Client(api_key=gemini_key)
+                self._enable_gemini = True
+                print('[SBIREngine] Gemini client initialized.')
+            except Exception as e:
+                print(f'[SBIREngine] Gemini init failed: {e}')
+        else:
+            print('[SBIREngine] GEMINI_API_KEY not set — Stage2 disabled.')
+
         self._loaded = True
         print(f'[SBIREngine] Ready. gallery={len(gallery_images)} images, device={device}')
+
+    # ------------------------------------------------------------------
+    # Gemini ヘルパー
+    # ------------------------------------------------------------------
+
+    def _describe_sketch_with_gemini(self, sketch_img) -> tuple[str | None, str | None]:
+        """スケッチ画像からカテゴリ名と形状特徴を返す。
+        Returns: (category, features)
+          category: "T-shirt"  → CLIPハードフィルタ用
+          features: "short sleeves, round neckline"  → インスタンスレベルソフトリランク用
+        """
+        import io
+        from google.genai import types as _gtypes
+
+        buf = io.BytesIO()
+        sketch_img.save(buf, format='PNG')
+        img_bytes = buf.getvalue()
+
+        prompt = (
+            'This is a hand-drawn sketch of an object.\n'
+            'Provide exactly two lines:\n'
+            'CATEGORY: <the object name in 1-2 words, e.g. "T-shirt">\n'
+            'FEATURES: <shape and structure details only, no color, 5-8 words, '
+            'e.g. "short sleeves, round neckline, rectangular body">\n'
+            'Nothing else.'
+        )
+        try:
+            response = self._gemini_client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=[
+                    _gtypes.Part.from_bytes(data=img_bytes, mime_type='image/png'),
+                    _gtypes.Part.from_text(text=prompt),
+                ],
+            )
+        except Exception:
+            response = self._gemini_client.models.generate_content(
+                model='gemini-1.5-flash',
+                contents=[
+                    _gtypes.Part.from_bytes(data=img_bytes, mime_type='image/png'),
+                    _gtypes.Part.from_text(text=prompt),
+                ],
+            )
+
+        category, features = None, None
+        for line in response.text.strip().splitlines():
+            line = line.strip()
+            if line.upper().startswith('CATEGORY:'):
+                category = line.split(':', 1)[1].strip().strip('"\'')
+            elif line.upper().startswith('FEATURES:'):
+                features = line.split(':', 1)[1].strip().strip('"\'')
+
+        print(f'[SBIREngine] Gemini category="{category}" features="{features}"')
+        return category, features
 
     # ------------------------------------------------------------------
     # 検索
@@ -173,8 +279,9 @@ class SBIREngine:
         self,
         sketch_path: str | Path,
         topk: int = 30,
-        scape_weight: float = 0.7,
-        dino_weight:  float = 0.3,
+        scape_weight: float = 0.6,
+        dino_weight:  float = 0.2,
+        patch_weight: float = 0.2,
     ) -> dict[str, Any]:
         """スケッチをエンコードして検索結果 dict を返す（高速）。"""
         if not self._loaded:
@@ -185,7 +292,8 @@ class SBIREngine:
 
         from run_sbir_once_from_db import (
             load_rgb_image, canonical_name_key,
-            minmax_normalize, encode_dinov2_from_pil,
+            minmax_normalize, encode_dinov2_both,
+            get_active_patch_mask, compute_partial_patch_score,
         )
 
         sketch_path = Path(sketch_path)
@@ -205,49 +313,80 @@ class SBIREngine:
         actual_k    = min(coarse_topk, len(self._gallery_images))
         coarse_vals, coarse_idxs = torch.topk(sims, k=actual_k)
 
-        final_scores  = coarse_vals.clone()
-        dino_scores   = torch.zeros(len(coarse_vals), dtype=torch.float32)
-        scape_norm    = None
-        dino_norm     = None
+        final_scores   = coarse_vals.clone()
+        dino_scores    = torch.zeros(len(coarse_vals), dtype=torch.float32)
+        patch_scores   = torch.zeros(len(coarse_vals), dtype=torch.float32)
+        scape_norm     = None
+        dino_norm      = None
+        patch_norm     = None
         fusion_weights = None
         fusion_applied = False
 
-        # ---- DINOv2 フュージョン ----
+        # ---- DINOv2 グローバル + パッチ フュージョン ----
         if self._enable_dinov2 and self._dino_model is not None:
             try:
-                sketch_dino = encode_dinov2_from_pil(sketch_img, self._dino_model, device)
-                valid = 0
+                # 1回のフォワードパスでグローバルとパッチ両方を取得
+                sketch_dino_global, sketch_dino_patches = encode_dinov2_both(
+                    sketch_img, self._dino_model, device
+                )
+                active_mask   = get_active_patch_mask(sketch_img)
+                active_count  = int(active_mask.sum())
+                dino_valid    = 0
+                patch_valid   = 0
 
                 for j, cand_i in enumerate(coarse_idxs.tolist()):
-                    gallery = self._gallery_images[cand_i]
-                    key     = canonical_name_key(gallery['file_name'])
-                    photo   = self._display_by_key.get(key)
+                    gallery  = self._gallery_images[cand_i]
+                    key      = canonical_name_key(gallery['file_name'])
+                    photo    = self._display_by_key.get(key)
                     if photo is None:
                         continue
                     photo_id = int(photo['id'])
 
-                    emb = None
+                    # グローバル DINOv2 スコア
                     if self._dino_embeddings is not None:
                         idx = self._dino_id_to_index.get(photo_id)
                         if idx is not None:
-                            emb = self._dino_embeddings[idx]
-                    if emb is None:
-                        continue
+                            dino_scores[j] = float(np.dot(sketch_dino_global, self._dino_embeddings[idx]))
+                            dino_valid += 1
 
-                    dino_scores[j] = float(np.dot(sketch_dino, emb))
-                    valid += 1
+                    # パッチマッチングスコア
+                    if self._enable_patch and self._patch_embeddings is not None:
+                        pidx = self._patch_id_to_index.get(photo_id)
+                        if pidx is not None:
+                            patch_scores[j] = compute_partial_patch_score(
+                                sketch_dino_patches,
+                                self._patch_embeddings[pidx],
+                                active_mask,
+                            )
+                            patch_valid += 1
 
-                if valid > 0:
-                    w_sum   = scape_weight + dino_weight
+                use_dino  = dino_valid  > 0
+                use_patch = patch_valid > 0
+                if use_dino or use_patch:
+                    w_dino_eff  = dino_weight  if use_dino  else 0.0
+                    w_patch_eff = patch_weight if use_patch else 0.0
+                    w_sum = scape_weight + w_dino_eff + w_patch_eff
                     w_scape = scape_weight / w_sum
-                    w_dino  = dino_weight  / w_sum
-                    scape_norm     = minmax_normalize(coarse_vals)
-                    dino_norm      = minmax_normalize(dino_scores)
-                    fusion_weights = {'scape': float(w_scape), 'dinov2': float(w_dino)}
-                    final_scores   = w_scape * scape_norm + w_dino * dino_norm
+                    w_dino  = w_dino_eff   / w_sum
+                    w_patch = w_patch_eff  / w_sum
+
+                    scape_norm  = minmax_normalize(coarse_vals)
+                    dino_norm   = minmax_normalize(dino_scores)
+                    patch_norm  = minmax_normalize(patch_scores)
+
+                    final_scores = w_scape * scape_norm + w_dino * dino_norm + w_patch * patch_norm
+                    fusion_weights = {
+                        'scape':   float(w_scape),
+                        'dinov2':  float(w_dino),
+                        'patch':   float(w_patch),
+                    }
                     fusion_applied = True
+                    print(
+                        f'[SBIREngine] Fusion: scape={w_scape:.2f} dino={w_dino:.2f} patch={w_patch:.2f} '
+                        f'active_patches={active_count}/256'
+                    )
             except Exception as e:
-                print(f'[SBIREngine] DINOv2 fusion failed: {e}')
+                print(f'[SBIREngine] DINOv2/patch fusion failed: {e}')
 
         # ---- ランキング構築 ----
         sort_order = torch.argsort(final_scores, descending=True)
@@ -260,19 +399,21 @@ class SBIREngine:
             key     = canonical_name_key(gallery['file_name'])
             photo   = self._display_by_key.get(key)
             ranked.append({
-                'rank':                rank,
-                'gallery_id':          int(gallery['id']),
-                'gallery_file':        gallery['file_name'],
-                'photo_id':            int(photo['id'])      if photo else None,
-                'photo_file':          photo['file_name']    if photo else None,
-                'photo_source_path':   photo['source_path']  if photo else None,
-                'score':               float(final_scores[pos].item()),
-                'score_sketchscape':   float(coarse_vals[pos].item()),
-                'score_clip_text':     None,
-                'score_sketchscape_norm': float(scape_norm[pos].item()) if scape_norm is not None else None,
+                'rank':                   rank,
+                'gallery_id':             int(gallery['id']),
+                'gallery_file':           gallery['file_name'],
+                'photo_id':               int(photo['id'])      if photo else None,
+                'photo_file':             photo['file_name']    if photo else None,
+                'photo_source_path':      photo['source_path']  if photo else None,
+                'score':                  float(final_scores[pos].item()),
+                'score_sketchscape':      float(coarse_vals[pos].item()),
+                'score_clip_text':        None,
+                'score_sketchscape_norm': float(scape_norm[pos].item())  if scape_norm  is not None else None,
                 'score_clip_text_norm':   None,
-                'score_dinov2':        float(dino_scores[pos].item()) if self._enable_dinov2 else None,
-                'score_dinov2_norm':   float(dino_norm[pos].item())   if dino_norm is not None else None,
+                'score_dinov2':           float(dino_scores[pos].item()) if self._enable_dinov2 else None,
+                'score_dinov2_norm':      float(dino_norm[pos].item())   if dino_norm   is not None else None,
+                'score_patch':            float(patch_scores[pos].item()) if self._enable_patch else None,
+                'score_patch_norm':       float(patch_norm[pos].item())  if patch_norm  is not None else None,
             })
 
         return {
@@ -280,6 +421,7 @@ class SBIREngine:
             'device':                device,
             'coarse_topk':           actual_k,
             'dinov2_fusion_enabled': self._enable_dinov2,
+            'patch_fusion_enabled':  self._enable_patch,
             'dinov2_fusion_applied': fusion_applied,
             'fusion_weights':        fusion_weights,
             'topk':                  ranked,
